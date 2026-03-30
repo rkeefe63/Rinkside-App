@@ -1,618 +1,1103 @@
-// ── NHL API ────────────────────────────────────────────────
-const NHL = 'https://api-web.nhle.com/v1';
+// ============================================================
+// Rinkside App — app.js
+// NHL chatbot with live API data, hockey fan voice
+// ============================================================
 
-async function nhlFetch(url) {
-    const proxies = [
-        u => `https://api.allorigins.win/get?url=${encodeURIComponent(u)}`,
-        u => `https://corsproxy.io/?${encodeURIComponent(u)}`,
-    ];
-    for (const proxy of proxies) {
-        try {
-            const res = await fetch(proxy(url));
-            if (!res.ok) continue;
+const NHL_BASE = 'https://api-web.nhle.com/v1';
+
+// --- 1. NHL API fetch with proxy fallback ---
+async function nhlFetch(path) {
+    const url = `${NHL_BASE}${path}`;
+    const encoded = encodeURIComponent(url);
+
+    // Try allorigins first
+    try {
+        const res = await fetch(`https://api.allorigins.win/get?url=${encoded}`);
+        if (res.ok) {
             const data = await res.json();
-            if (data.contents) return JSON.parse(data.contents);
-            return data;
-        } catch (e) { continue; }
-    }
+            return JSON.parse(data.contents);
+        }
+    } catch (_) { }
+
+    // Fallback: corsproxy.io
+    try {
+        const res = await fetch(`https://corsproxy.io/?${encoded}`);
+        if (res.ok) return await res.json();
+    } catch (_) { }
+
+    // Last resort: direct
     const res = await fetch(url);
     if (!res.ok) throw new Error(`NHL API error: ${res.status}`);
     return res.json();
 }
 
-// ── Chat UI ────────────────────────────────────────────────
-const messages = document.getElementById('chat-messages');
-const form = document.getElementById('chat-form');
-const input = document.getElementById('chat-input');
+// ============================================================
+// 2. Chat UI
+// ============================================================
 
-function addMessage(role, html) {
-    const div = document.createElement('div');
-    div.className = `message ${role}`;
-    div.innerHTML = `<div class="avatar">${role === 'bot' ? '🏒' : '👤'}</div><div class="bubble">${html}</div>`;
-    messages.appendChild(div);
-    messages.scrollTop = messages.scrollHeight;
-    return div;
+function addMessage(text, sender = 'bot') {
+    const chat = document.getElementById('chat-messages');
+    const msg = document.createElement('div');
+    msg.className = `message ${sender}`;
+    msg.innerHTML = text;
+    chat.appendChild(msg);
+    chat.scrollTop = chat.scrollHeight;
 }
 
 function showTyping() {
-    const div = document.createElement('div');
-    div.className = 'message bot typing';
-    div.innerHTML = `<div class="avatar">🏒</div><div class="bubble"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>`;
-    messages.appendChild(div);
-    messages.scrollTop = messages.scrollHeight;
-    return div;
+    const chat = document.getElementById('chat-messages');
+    const typing = document.createElement('div');
+    typing.className = 'message bot typing-indicator';
+    typing.id = 'typing';
+    typing.innerHTML = '<span></span><span></span><span></span>';
+    chat.appendChild(typing);
+    chat.scrollTop = chat.scrollHeight;
+}
+
+function hideTyping() {
+    const el = document.getElementById('typing');
+    if (el) el.remove();
 }
 
 function sendSuggestion(el) {
-    input.value = el.textContent.replace(/^[^\w]+/, '').trim();
-    form.dispatchEvent(new Event('submit'));
+    const text = el.textContent.trim();
+    const input = document.getElementById('user-input');
+    if (input) {
+        input.value = text;
+        handleSubmit();
+    }
 }
 
-form.addEventListener('submit', async e => {
-    e.preventDefault();
-    const text = input.value.trim();
-    if (!text) return;
-    addMessage('user', text);
+async function handleSubmit() {
+    const input = document.getElementById('user-input');
+    const q = input.value.trim();
+    if (!q) return;
     input.value = '';
-    const typing = showTyping();
+    addMessage(q, 'user');
+    showTyping();
     try {
-        const response = await getResponse(text.toLowerCase());
-        typing.remove();
-        addMessage('bot', response);
-    } catch (err) {
-        typing.remove();
-        addMessage('bot', `<span class="error">Oof, couldn't connect to the NHL API right now. Try again in a sec — even Bettman has bad days.</span>`);
+        const reply = await getResponse(q);
+        hideTyping();
+        addMessage(reply, 'bot');
+    } catch (e) {
+        hideTyping();
+        addMessage(`Whoa, hit the glass on that one — something went wrong. Try again? <em>(${e.message})</em>`, 'bot');
+    }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    const form = document.getElementById('chat-form');
+    if (form) {
+        form.addEventListener('submit', e => {
+            e.preventDefault();
+            handleSubmit();
+        });
     }
 });
 
-// ── Intent Router ──────────────────────────────────────────
+// ============================================================
+// 3. Intent Router
+// ============================================================
+
 async function getResponse(q) {
-    if (match(q, ['standing', 'division', 'conference', 'table', 'league', 'playoff', 'wild card', 'first place', 'last place', 'best record', 'worst record'])) return await getStandings();
-    if (match(q, ['today', 'tonight', 'game', 'schedule', 'score', 'on tonight', 'on today', 'matchup', 'result', 'final score', 'last night', 'any games'])) return await getScores();
-    if (match(q, ['top scorer', 'point leader', 'most point', 'scoring leader', 'art ross', 'leading in point', 'leading the nhl', 'most goal', 'goal leader', 'assist leader', 'most assist', 'best scorer', 'leading scorer', 'point', 'goals', 'assists'])) return await getTopScorers();
-    if (match(q, ['goalie', 'goaltender', 'save', 'gaa', 'sv%', 'vezina', 'best goalie', 'top goalie', 'netminder'])) return await getTopGoalies();
-    if (match(q, ['jack adams', 'coach of the year', 'best coach', 'coaching'])) return awardsOpinion('jack_adams', q);
-    if (match(q, ['hart trophy', 'hart memorial', 'mvp', 'most valuable'])) return awardsOpinion('hart', q);
-    if (match(q, ['norris', 'best defenceman', 'best defenseman', 'top defenceman', 'top defenseman'])) return awardsOpinion('norris', q);
-    if (match(q, ['calder', 'rookie of the year', 'best rookie', 'top rookie'])) return awardsOpinion('calder', q);
-    if (match(q, ['conn smythe', 'playoff mvp', 'best playoff'])) return awardsOpinion('conn_smythe', q);
-    if (match(q, ['trade', 'traded', 'deadline', 'rumor', 'rumour', 'signing', 'signed', 'free agent'])) return tradeOpinion(q);
-    if (match(q, ['best team', 'cup favourite', 'cup favorite', 'win the cup', 'stanley cup', 'winning the cup', 'who wins', 'cup this year', 'cup prediction', 'cup contender'])) return await getCupPrediction();
-    if (match(q, ['salary cap', 'cap space', 'cap hit', 'cap ceiling', 'escrow', 'cba', 'collective bargaining'])) return explainSalaryCap();
-    if (match(q, ['draft', 'nhl draft', 'lottery', 'first overall', 'prospect'])) return explainDraft();
-    if (match(q, ['playoff format', 'how do playoffs work', 'playoff seeding', 'how does the playoff', 'playoff structure'])) return explainPlayoffs();
-    if (match(q, ['shootout', 'shoot out'])) return explainShootout();
-    if (match(q, ['fight', 'fighting', 'enforcer', 'dropping the gloves'])) return explainFighting();
-    if (match(q, ['line', 'line change', 'fourth line', 'first line', 'line combination', 'forward line', 'defensive pair'])) return explainLines();
-    if (match(q, ['faceoff', 'face off', 'face-off', 'dot'])) return explainFaceoffs();
-    if (match(q, ['thought', 'think', 'opinion', 'feel about', 'take on', 'what about', 'who should', 'who will', 'who would', 'worst team', 'favourite', 'favorite', 'overrated', 'underrated'])) return generalOpinion(q);
-    const teamMatch = detectTeam(q);
-    if (teamMatch && match(q, ['playoff', 'make it', 'making it', 'going to make', 'will they', 'chance', 'contend', 'bubble', 'eliminate', 'clinch', 'season', 'outlook', 'think about', 'thoughts on', 'how are', 'how is', 'doing this'])) return await getTeamOutlook(teamMatch);
-    if (match(q, ['offside', 'off side'])) return explainOffside();
-    if (match(q, ['penalty', 'penalties', 'power play', 'pp', 'shorthanded', 'penalty kill', 'hooking', 'tripping', 'slashing'])) return explainPenalties();
-    if (match(q, ['hat trick', 'hat-trick'])) return explainHatTrick();
-    if (match(q, ['bar down', 'top cheese', 'celly', 'chirp', 'dangle', 'snipe', 'biscuit', 'barn', 'twig', 'wheel'])) return explainLingo(q);
-    if (match(q, ['who is', 'tell me about', 'stats for', 'how is', 'how has', 'how many', 'player', 'mcdavid', 'matthews', 'draisaitl', 'crosby', 'ovechkin', 'makar', 'hedman', 'mackinnon', 'rantanen', 'pastrnak'])) return await searchPlayer(q);
+    const lq = q.toLowerCase();
+
+    if (match(lq, ['standings', 'league table', 'who is first', 'who leads', 'points leader', 'top team']))
+        return getStandings();
+
+    if (match(lq, ['score', 'scores', 'games today', 'results', 'last night', 'tonight', 'schedule', 'on tonight', 'playing tonight']))
+        return getScores();
+
+    if (match(lq, ['top scorer', 'top scorers', 'points leader', 'most points', 'scoring leader', 'leading scorer', 'point leader']))
+        return getTopScorers();
+
+    if (match(lq, ['goalie', 'goalies', 'save percentage', 'best goalie', 'top goalie', 'between the pipes', 'netminder', 'backstop']))
+        return getTopGoalies();
+
+    if (match(lq, ['jack adams', 'best coach', 'coach of the year']))
+        return awardsOpinion('jack_adams', q);
+
+    if (match(lq, ['hart trophy', 'hart memorial', 'mvp', 'most valuable', 'best player award']))
+        return awardsOpinion('hart', q);
+
+    if (match(lq, ['norris trophy', 'best defenceman', 'best defenseman', 'top d-man', 'norris']))
+        return awardsOpinion('norris', q);
+
+    if (match(lq, ['calder trophy', 'best rookie', 'rookie of the year', 'calder']))
+        return awardsOpinion('calder', q);
+
+    if (match(lq, ['conn smythe', 'playoff mvp', 'smythe']))
+        return awardsOpinion('conn_smythe', q);
+
+    if (match(lq, ['trade', 'signing', 'signed', 'traded', 'free agent', 'rumour', 'rumor', 'deadline']))
+        return tradeOpinion(q);
+
+    if (match(lq, ['stanley cup', 'cup winner', 'cup favourite', 'cup favorite', 'win the cup', 'best team', 'championship', 'cup prediction', 'who will win']))
+        return getCupPrediction();
+
+    if (match(lq, ['salary cap', 'cap space', 'cap hit', 'cap ceiling', 'ltir', 'buyout']))
+        return explainSalaryCap();
+
+    if (match(lq, ['draft', 'nhl draft', 'first overall', 'draft pick', 'prospect']))
+        return explainDraft();
+
+    if (match(lq, ['playoff format', 'how do playoffs work', 'playoff structure', 'wildcard', 'wild card', 'how playoffs']))
+        return explainPlayoffs();
+
+    if (match(lq, ['shootout', 'shoot out', 'penalty shots', 'skills competition']))
+        return explainShootout();
+
+    if (match(lq, ['fighting', 'fight', 'enforcer', 'dropping the gloves', 'fisticuffs']))
+        return explainFighting();
+
+    if (match(lq, ['lines', 'line combinations', 'fourth line', 'first line', 'line matching', 'forward lines']))
+        return explainLines();
+
+    if (match(lq, ['faceoff', 'face-off', 'face off', 'dot', 'circle']))
+        return explainFaceoffs();
+
+    if (match(lq, ['opinion', 'think', 'better', 'compare', 'vs', 'versus', 'greatest', 'goat', 'who is better', 'comparison']))
+        return generalOpinion(q);
+
+    // Team outlook — check before generic icing/offside
+    const teamMatch = detectTeam(lq);
+    if (teamMatch && match(lq, ['playoff', 'season', 'outlook', 'chances', 'contender', 'rebuild', 'cup run', 'how are', 'doing this']))
+        return getTeamOutlook(teamMatch);
+
+    if (match(lq, ['icing', 'icing the puck']))
+        return explainIcing();
+
+    if (match(lq, ['offside', 'off-side', 'off side']))
+        return explainOffside();
+
+    if (match(lq, ['penalty', 'penalties', 'power play', 'power-play', 'pp', 'shorthanded', 'pk', 'penalty kill']))
+        return explainPenalties();
+
+    if (match(lq, ['hat trick', 'hat-trick', 'three goals']))
+        return explainHatTrick();
+
+    if (match(lq, ['lingo', 'slang', 'terms', 'glossary', 'what does', 'what is a', 'bar down', 'top cheese', 'celly', 'chirp', 'dangle', 'snipe', 'biscuit', 'barn']))
+        return explainLingo(q);
+
+    if (match(lq, ['who is', 'tell me about', 'stats for', 'player', 'career']) || /^[a-z]+ [a-z]+$/.test(lq.trim()))
+        return searchPlayer(q);
+
     return fallback(q);
 }
 
-function match(q, keywords) { return keywords.some(k => q.includes(k)); }
+// ============================================================
+// 4. match() helper
+// ============================================================
 
-// ── Breakdown helper ───────────────────────────────────────
+function match(str, keywords) {
+    return keywords.some(k => str.includes(k));
+}
+
+// ============================================================
+// 5. breakdown() helper
+// ============================================================
+
 function breakdown(title, notes) {
-    return `<div style="margin-top:1rem;padding:1rem;background:rgba(79,142,247,0.07);border:1px solid rgba(79,142,247,0.2);border-left:3px solid var(--accent);border-radius:10px;">
-    <div style="font-size:0.8rem;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:0.75rem">🎙️ ${title}</div>
-    ${notes.map(n => `<p style="font-size:0.88rem;color:var(--text);line-height:1.7;margin-bottom:0.6rem">${n}</p>`).join('')}
-    </div>`;
+    const paras = notes.map(n => `<p>${n}</p>`).join('');
+    return `<div style="border-left:3px solid var(--accent,#c8102e);padding:8px 12px;margin-top:10px;">
+  <div style="font-variant:small-caps;font-weight:700;margin-bottom:6px;">${title}</div>
+  ${paras}
+</div>`;
 }
 
-// ── Standings ──────────────────────────────────────────────
+// ============================================================
+// 6. getStandings()
+// ============================================================
+
 async function getStandings() {
-    const data = await nhlFetch(`${NHL}/standings/now`);
-    const standings = data.standings;
-    const divisions = {};
-    standings.forEach(t => {
-        if (!divisions[t.divisionName]) divisions[t.divisionName] = [];
-        divisions[t.divisionName].push(t);
-    });
-    let html = `Here's where things stand in the NHL right now. Every point matters — this is where the playoff picture is taking shape 🏒<br><br>`;
-    Object.entries(divisions).forEach(([div, teams]) => {
-        html += `<strong>${div}</strong>`;
-        html += `<table class="stat-table"><thead><tr><th>#</th><th>Team</th><th>GP</th><th>W</th><th>L</th><th>OTL</th><th>PTS</th></tr></thead><tbody>`;
-        teams.slice(0, 8).forEach((t, i) => {
-            const icon = i < 3 ? '🟢' : i === 3 ? '🟡' : '';
-            html += `<tr><td class="rank">${icon} ${i + 1}</td><td class="team-name">${t.teamName.default}</td><td>${t.gamesPlayed}</td><td>${t.wins}</td><td>${t.losses}</td><td>${t.otLosses}</td><td class="highlight">${t.points}</td></tr>`;
-        });
-        html += `</tbody></table><br>`;
-    });
-    html += `🟢 = Division leader &nbsp;|&nbsp; 🟡 = Wild card spot<br><br>`;
-    const sorted = [...standings].sort((a, b) => b.points - a.points);
-    const leader = sorted[0];
-    const last = sorted[sorted.length - 1];
-    const bubble = standings.filter(t => t.wildcardSequence === 1 || t.wildcardSequence === 2);
-    const notes = [
-        `<strong>${leader.teamName.default}</strong> are sitting on top of the league with <span class="highlight">${leader.points} points</span>. That's the benchmark everyone else is chasing right now.`,
-        bubble.length ? `The wild card race is where it gets spicy — <strong>${bubble.map(t => t.teamName.default).join(' and ')}</strong> are right on that bubble. One bad week and they're watching the playoffs from the couch.` : `The playoff picture is starting to take shape — watch the wild card spots closely as the schedule tightens up.`,
-        `<strong>${last.teamName.default}</strong> are at the bottom with ${last.points} points. Tough season — but hey, that's a strong lottery position come draft time.`,
-        `How to read this: <strong>GP</strong> = games played, <strong>W/L</strong> = wins/losses, <strong>OTL</strong> = overtime losses (still worth 1 point), <strong>PTS</strong> = total points. Two points for a win, one for an OTL, zero for a regulation loss.`
-    ];
-    html += breakdown('Standings Breakdown', notes);
-    return html;
+    const data = await nhlFetch('/standings/now');
+    const teams = data.standings || [];
+    if (!teams.length) return "Couldn't pull the standings right now — the ice must be getting resurfaced. Try again in a bit.";
+
+    const east = teams.filter(t => t.conferenceName === 'Eastern').sort((a, b) => b.points - a.points).slice(0, 8);
+    const west = teams.filter(t => t.conferenceName === 'Western').sort((a, b) => b.points - a.points).slice(0, 8);
+
+    function tableRows(list) {
+        return list.map((t, i) => {
+            const name = t.teamName?.default || t.teamAbbrev?.default || 'Unknown';
+            const abbrev = t.teamAbbrev?.default || '';
+            const pts = t.points ?? 0;
+            const gp = t.gamesPlayed ?? 0;
+            const w = t.wins ?? 0;
+            const l = t.losses ?? 0;
+            const ot = t.otLosses ?? 0;
+            return `<tr><td>${i + 1}</td><td><strong>${abbrev}</strong> ${name}</td><td>${gp}</td><td>${w}</td><td>${l}</td><td>${ot}</td><td><strong>${pts}</strong></td></tr>`;
+        }).join('');
+    }
+
+    const table = (title, rows) => `
+    <strong>${title}</strong>
+    <table style="width:100%;border-collapse:collapse;font-size:0.85em;margin:6px 0 12px;">
+      <thead><tr style="border-bottom:1px solid #444;">
+        <th>#</th><th>Team</th><th>GP</th><th>W</th><th>L</th><th>OT</th><th>PTS</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+
+    const leader = teams.sort((a, b) => b.points - a.points)[0];
+    const leaderName = leader?.teamName?.default || 'the top team';
+
+    return `Here's how the league looks right now — ${leaderName} sitting pretty at the top of the pile:
+${table('🏒 Eastern Conference (Top 8)', tableRows(east))}
+${table('🏒 Western Conference (Top 8)', tableRows(west))}
+${breakdown('The Lay of the Land', [
+        `${leaderName} leads the league in points — they've been dialled in all season.`,
+        'The playoff picture is always shifting. Eight teams per conference make it, with the top three in each division guaranteed a spot.',
+        'Ask me about a specific team\'s outlook, or who I think lifts the Cup!'
+    ])}`;
 }
 
-// ── Scores ─────────────────────────────────────────────────
+// ============================================================
+// 7. getScores()
+// ============================================================
+
 async function getScores() {
-    const dateStr = new Date().toISOString().split('T')[0];
-    const data = await nhlFetch(`${NHL}/schedule/${dateStr}`);
+    const today = new Date();
+    const dateStr = today.toISOString().split('T')[0];
+    let data;
+    try {
+        data = await nhlFetch(`/schedule/${dateStr}`);
+    } catch (_) {
+        return "Couldn't grab the schedule right now — the Zamboni must be blocking the API. Try again shortly.";
+    }
+
     const games = data.gameWeek?.[0]?.games || [];
-    if (!games.length) return `No games on the schedule today — even the NHL takes a breather sometimes. Check back tomorrow, the boys'll be back on the ice soon enough. 🏒`;
-    let html = `Here's tonight's slate. ${games.length} game${games.length > 1 ? 's' : ''} on the board — grab your jersey 🎽<br><br>`;
-    games.forEach(g => {
-        const away = g.awayTeam, home = g.homeTeam;
-        const isLive = g.gameState === 'LIVE' || g.gameState === 'CRIT';
-        const isFinal = g.gameState === 'FINAL' || g.gameState === 'OFF';
-        const scoreStr = (isLive || isFinal) ? `<span class="highlight">${away.score ?? 0} – ${home.score ?? 0}</span>` : '';
-        const status = isFinal ? '✅ Final' : isLive ? '🔴 Live' : `🕐 ${g.startTimeUTC ? new Date(g.startTimeUTC).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : 'TBD'}`;
-        html += `<div style="margin-bottom:0.75rem;padding:0.75rem;background:var(--bg-input);border:1px solid var(--border);border-radius:10px;">
-            <div style="display:flex;justify-content:space-between;align-items:center;">
-                <span><strong>${away.abbrev}</strong> @ <strong>${home.abbrev}</strong> ${scoreStr}</span>
-                <span style="font-size:0.8rem;color:var(--text-muted)">${status}</span>
-            </div>
-            ${isLive && g.periodDescriptor ? `<div style="font-size:0.78rem;color:var(--accent);margin-top:0.3rem">Period ${g.periodDescriptor.number} • ${g.clock?.timeRemaining ?? ''}</div>` : ''}
-        </div>`;
-    });
-    return html;
+    if (!games.length) {
+        return `No games found for ${dateStr}. Might be an off day — even the boys need rest. Try asking about standings or top scorers!`;
+    }
+
+    const lines = games.map(g => {
+        const away = g.awayTeam?.abbrev || 'AWAY';
+        const home = g.homeTeam?.abbrev || 'HOME';
+        const awayScore = g.awayTeam?.score ?? '';
+        const homeScore = g.homeTeam?.score ?? '';
+        const state = g.gameState || '';
+        const period = g.periodDescriptor?.periodType || '';
+        const timeRemain = g.clock?.timeRemaining || '';
+
+        let status = '';
+        if (state === 'FINAL' || state === 'OFF') {
+            status = `<span style="color:#aaa;">FINAL</span>`;
+        } else if (state === 'LIVE' || state === 'CRIT') {
+            status = `<span style="color:#c8102e;">LIVE — ${period} ${timeRemain}</span>`;
+        } else {
+            const startTime = g.startTimeUTC ? new Date(g.startTimeUTC).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'TBD';
+            status = `<span style="color:#aaa;">${startTime}</span>`;
+        }
+
+        const scoreStr = (awayScore !== '' && homeScore !== '') ? `${awayScore} – ${homeScore}` : 'vs';
+        return `<div style="padding:4px 0;border-bottom:1px solid #333;"><strong>${away}</strong> ${scoreStr} <strong>${home}</strong> &nbsp; ${status}</div>`;
+    }).join('');
+
+    return `Here's the schedule for <strong>${dateStr}</strong>:<br><br>${lines}<br>
+${breakdown('Quick Take', [
+        `${games.length} game${games.length !== 1 ? 's' : ''} on the docket today.`,
+        'Ask me about standings, top scorers, or who I think wins the Cup!'
+    ])}`;
 }
 
-// ── Top Scorers ────────────────────────────────────────────
+// ============================================================
+// 8. getTopScorers()
+// ============================================================
+
 async function getTopScorers() {
-    const data = await nhlFetch(`${NHL}/skater-stats-leaders/current?categories=points&limit=10`);
-    const players = data.points;
-    let html = `The Art Ross race is heating up. Here are the top point-getters in the league right now 🎯<br><br>`;
-    html += `<table class="stat-table"><thead><tr><th>#</th><th>Player</th><th>Team</th><th>G</th><th>A</th><th>PTS</th></tr></thead><tbody>`;
-    players.forEach((p, i) => {
-        html += `<tr><td class="rank">${i + 1}</td><td class="team-name">${p.firstName.default} ${p.lastName.default}</td><td>${p.teamAbbrevs}</td><td>${p.goals ?? '—'}</td><td>${p.assists ?? '—'}</td><td class="highlight">${p.value}</td></tr>`;
-    });
-    html += `</tbody></table><br>`;
-    const leader = players[0];
-    const leaderName = `${leader.firstName.default} ${leader.lastName.default}`;
-    const gap = leader.value - players[1].value;
-    const second = `${players[1].firstName.default} ${players[1].lastName.default}`;
-    const topGoals = [...players].sort((a, b) => (b.goals ?? 0) - (a.goals ?? 0))[0];
-    const topAssists = [...players].sort((a, b) => (b.assists ?? 0) - (a.assists ?? 0))[0];
-    const notes = [
-        `<strong>${leaderName}</strong> leads the Art Ross race with <span class="highlight">${leader.value} points</span>. ${gap > 5 ? `That's a ${gap}-point cushion over ${second} — this race might already be over, folks.` : `Only ${gap} point${gap === 1 ? '' : 's'} ahead of ${second} — this one's far from settled.`}`,
-        `<strong>${topGoals.firstName.default} ${topGoals.lastName.default}</strong> leads in goals with ${topGoals.goals}. Pure sniper — this is a guy who makes goalies nervous every single shift.`,
-        `<strong>${topAssists.firstName.default} ${topAssists.lastName.default}</strong> leads in assists with ${topAssists.assists}. The playmaker of this group — the kind of player who makes everyone around him better.`,
-        `How to read this: <strong>G</strong> = goals, <strong>A</strong> = assists, <strong>PTS</strong> = points (G + A combined). Points are the currency of the NHL — it's how you measure offensive impact.`
-    ];
-    html += breakdown('Rinkside Breakdown', notes);
-    return html;
+    const data = await nhlFetch('/skater-stats-leaders/current?categories=points&limit=10');
+    const scorers = data.points || [];
+    if (!scorers.length) return "Can't pull the scoring leaders right now — try again in a sec.";
+
+    const rows = scorers.map((p, i) => {
+        const name = `${p.firstName?.default || ''} ${p.lastName?.default || ''}`.trim();
+        const team = p.teamAbbrev || '';
+        const pts = p.value ?? 0;
+        const g = p.goals ?? 0;
+        const a = p.assists ?? 0;
+        const gp = p.gamesPlayed ?? 0;
+        return `<tr><td>${i + 1}</td><td><strong>${name}</strong></td><td>${team}</td><td>${gp}</td><td>${g}</td><td>${a}</td><td><strong>${pts}</strong></td></tr>`;
+    }).join('');
+
+    const leader = scorers[0];
+    const leaderName = `${leader?.firstName?.default || ''} ${leader?.lastName?.default || ''}`.trim();
+
+    return `Top 10 scoring leaders right now — ${leaderName} is absolutely bar down this season:
+<table style="width:100%;border-collapse:collapse;font-size:0.85em;margin:8px 0;">
+  <thead><tr style="border-bottom:1px solid #444;">
+    <th>#</th><th>Player</th><th>Team</th><th>GP</th><th>G</th><th>A</th><th>PTS</th>
+  </tr></thead>
+  <tbody>${rows}</tbody>
+</table>
+${breakdown('Scoring Race Breakdown', [
+        `${leaderName} is leading the pack — pure top cheese every night.`,
+        'Points leaders often drive Hart Trophy conversations. Ask me who I think wins the Hart!',
+        'Want to compare two players head-to-head? Just ask — e.g. "Matthews vs McDavid".'
+    ])}`;
 }
 
-// ── Top Goalies ────────────────────────────────────────────
+// ============================================================
+// 9. getTopGoalies()
+// ============================================================
+
 async function getTopGoalies() {
-    const data = await nhlFetch(`${NHL}/goalie-stats-leaders/current?categories=savePctg&limit=10`);
-    const goalies = data.savePctg;
-    let html = `Between the pipes, these are the guys standing on their heads right now. Vezina Trophy conversation starts here 🥅<br><br>`;
-    html += `<table class="stat-table"><thead><tr><th>#</th><th>Goalie</th><th>Team</th><th>SV%</th><th>GAA</th></tr></thead><tbody>`;
-    goalies.forEach((g, i) => {
-        html += `<tr><td class="rank">${i + 1}</td><td class="team-name">${g.firstName.default} ${g.lastName.default}</td><td>${g.teamAbbrevs}</td><td class="highlight">${g.value?.toFixed(3) ?? '—'}</td><td>${g.goalsAgainstAverage?.toFixed(2) ?? '—'}</td></tr>`;
-    });
-    html += `</tbody></table><br>`;
-    const top = goalies[0];
-    const topName = `${top.firstName.default} ${top.lastName.default}`;
-    const elite = goalies.filter(g => (g.value ?? 0) > 0.920);
-    const notes = [
-        `<strong>${topName}</strong> is your SV% leader at <span class="highlight">${top.value?.toFixed(3)}</span>. ${top.value > 0.930 ? "That's an absolutely elite number — this goalie is single-handedly stealing games." : top.value > 0.920 ? "Solid elite-tier numbers — a legitimate Vezina conversation." : "Respectable numbers in a tough league."}`,
-        `${elite.length > 1 ? `There are ${elite.length} goalies above .920 SV% right now — that's a deep group of quality starters this season.` : `Only ${topName} is above .920 SV% in this group — elite goaltending is hard to find.`}`,
-        `How to read this: <strong>SV%</strong> = save percentage — what fraction of shots the goalie stopped. <strong>GAA</strong> = goals against average per game. Higher SV% is better, lower GAA is better. A .920+ SV% is elite. A GAA under 2.50 is excellent.`
-    ];
-    html += breakdown('Rinkside Breakdown', notes);
-    return html;
+    const data = await nhlFetch('/goalie-stats-leaders/current?categories=savePctg&limit=10');
+    const goalies = data.savePctg || [];
+    if (!goalies.length) return "Can't pull goalie stats right now — the crease is empty. Try again shortly.";
+
+    const rows = goalies.map((g, i) => {
+        const name = `${g.firstName?.default || ''} ${g.lastName?.default || ''}`.trim();
+        const team = g.teamAbbrev || '';
+        const svPct = g.value != null ? (g.value * 100).toFixed(2) + '%' : 'N/A';
+        const gp = g.gamesPlayed ?? 0;
+        const wins = g.wins ?? 0;
+        const gaa = g.goalsAgainstAverage != null ? g.goalsAgainstAverage.toFixed(2) : 'N/A';
+        return `<tr><td>${i + 1}</td><td><strong>${name}</strong></td><td>${team}</td><td>${gp}</td><td>${wins}</td><td>${gaa}</td><td><strong>${svPct}</strong></td></tr>`;
+    }).join('');
+
+    const leader = goalies[0];
+    const leaderName = `${leader?.firstName?.default || ''} ${leader?.lastName?.default || ''}`.trim();
+
+    return `Top 10 goalies by save percentage — ${leaderName} is absolutely standing on his head between the pipes:
+<table style="width:100%;border-collapse:collapse;font-size:0.85em;margin:8px 0;">
+  <thead><tr style="border-bottom:1px solid #444;">
+    <th>#</th><th>Goalie</th><th>Team</th><th>GP</th><th>W</th><th>GAA</th><th>SV%</th>
+  </tr></thead>
+  <tbody>${rows}</tbody>
+</table>
+${breakdown('Between the Pipes', [
+        `${leaderName} leads all netminders in save percentage — that's a Vezina-calibre season.`,
+        'A great goalie can steal a series. Ask me about the Vezina Trophy or Cup predictions!',
+        'Goaltending wins championships — it\'s the most important position on the ice.'
+    ])}`;
 }
 
-// ── Awards & Opinions ──────────────────────────────────────
+// ============================================================
+// 10. awardsOpinion()
+// ============================================================
+
 function awardsOpinion(award, q) {
     const opinions = {
         jack_adams: {
-            title: 'Jack Adams Award — Coach of the Year',
-            body: `The Jack Adams goes to the coach judged to have contributed the most to his team's success. It's voted on by the NHL Broadcasters' Association — so it's as much about narrative as it is about wins.<br><br>
-            The best Jack Adams cases are usually coaches who either overachieved with a rebuilding team, turned a struggling roster around mid-season, or took a contender to the next level. It rewards the guy who got more out of his group than anyone expected.<br><br>
-            Historically, coaches who win it tend to be in their first or second full season with a team — there's a freshness factor. A veteran coach with a loaded roster rarely wins it, even if they do a great job, because the expectation is already there.<br><br>
-            ${q.includes('lindy ruff') ? `<strong>Lindy Ruff</strong> winning the Jack Adams is a story about patience and trust. Ruff is one of the most experienced coaches in the league — he's been around long enough to know exactly what a team needs at every stage. When a coach with that kind of pedigree gets the right pieces around him and the team responds, voters take notice. It validates the process.` : `The Jack Adams conversation is always one of the best debates of the awards season — there's rarely a clear-cut winner.`}`
+            title: 'Jack Adams Award — Best Coach',
+            body: `The Jack Adams is all about who got the most out of their roster. Right now the conversation usually circles around coaches who took a middling team and turned them into a playoff contender — that's the real test. A guy who inherits a 100-point team and wins 100 points isn't the story. Give me the coach who had no business being in the playoff race and found a way.`,
+            notes: [
+                'Look for coaches who overachieved relative to their roster talent.',
+                'System matters — teams that defend well and transition quickly reflect great coaching.',
+                'Mid-season adjustments after injuries or slumps are a huge factor voters consider.'
+            ]
         },
         hart: {
-            title: 'Hart Trophy — NHL MVP',
-            body: `The Hart Memorial Trophy goes to the player judged most valuable to his team. Key word: <em>valuable</em>. It's not just about who put up the best numbers — it's about who their team would miss the most.<br><br>
-            That's why a superstar on a bad team can win it. If you remove that player and the team goes from playoff contender to lottery team, that's a Hart Trophy argument.<br><br>
-            Typically the winner is either the Art Ross leader (top scorer) or a player whose team finished near the top of the standings. The debate gets interesting when those two things don't overlap.`
+            title: 'Hart Trophy — League MVP',
+            body: `The Hart is the most debated trophy in hockey. Is it the best player, or the most valuable to his team? Historically voters lean toward the guy whose team would fall apart without him. McDavid has made it his personal property in recent years, but when a guy on a weaker team puts up monster numbers, the conversation gets spicy.`,
+            notes: [
+                'McDavid and Draisaitl have dominated Hart voting — Edmonton\'s offence runs through them.',
+                'A player on a playoff team almost always wins — narrative matters.',
+                'Watch for a breakout season from a guy carrying a rebuilding team — that\'s a Hart story.'
+            ]
         },
         norris: {
             title: 'Norris Trophy — Best Defenceman',
-            body: `The Norris Trophy goes to the defenceman who demonstrates the greatest all-around ability. It's the most debated award in hockey because "all-around" means different things to different people.<br><br>
-            Old school voters weight offensive production heavily — points, power play contributions. Modern analytics voters want to see defensive zone coverage, shot suppression, and ice time in tough situations.<br><br>
-            The best Norris candidates do both — they quarterback the power play, log 25+ minutes a night, and make the right play in their own end. That combination is incredibly rare, which is why the same names come up every year.`
+            body: `The Norris goes to the defenceman who combines offensive production with defensive responsibility. Cale Makar has redefined what a modern blueliner looks like — he's a power play quarterback, a transition driver, and a shutdown guy all in one. But don't sleep on the two-way guys who don't light up the scoresheet — they get votes too.`,
+            notes: [
+                'Makar, Fox, and Hedman are perennial Norris candidates.',
+                'Points matter, but so does plus/minus, ice time, and defensive zone starts.',
+                'The best defencemen today are essentially a third forward on the power play.'
+            ]
         },
         calder: {
-            title: 'Calder Trophy — Rookie of the Year',
-            body: `The Calder Memorial Trophy goes to the player selected as the most proficient in his first year of NHL competition. Players are eligible if they haven't played more than 25 NHL games in previous seasons.<br><br>
-            The Calder race is one of the most exciting awards because you're watching players announce themselves to the league for the first time. A great Calder season can define a player's trajectory for years.<br><br>
-            Voters tend to reward players who made an immediate impact — not just good numbers, but players who looked like they belonged from night one. Confidence, compete level, and clutch moments matter as much as the stat line.`
+            title: 'Calder Trophy — Best Rookie',
+            body: `The Calder is always exciting because you're watching the next generation announce themselves. The best Calder races happen when two or three rookies are all having historic seasons. Voters love a guy who came in and immediately looked like a veteran — no adjustment period, just straight-up dominance from night one.`,
+            notes: [
+                'Eligibility: players in their first NHL season with fewer than 25 prior games.',
+                'Forwards tend to win more often, but a dominant rookie defenceman can steal it.',
+                'Watch for rookies on playoff teams — they get more exposure and votes.'
+            ]
         },
         conn_smythe: {
             title: 'Conn Smythe Trophy — Playoff MVP',
-            body: `The Conn Smythe goes to the most valuable player in the playoffs — and it doesn't have to go to a player on the winning team, though it almost always does.<br><br>
-            Playoff hockey is a completely different animal. The ice shrinks, the hitting gets harder, the goaltending gets better, and every shift feels like it matters. The Conn Smythe winner is usually the guy who showed up in the biggest moments — overtime goals, shutout performances, series-defining plays.<br><br>
-            Goalies win it more often than any other position. When a goalie steals a series, it's impossible to give it to anyone else. But a dominant forward who scores in every round makes a compelling case too.`
+            body: `The Conn Smythe is the most dramatic trophy in hockey. It's handed out in the moment, on the ice, after the Cup is won. Usually it goes to the best player on the winning team — but occasionally a guy on the losing side has such a ridiculous series that voters can't ignore him. Goalies who steal series are the classic Conn Smythe story.`,
+            notes: [
+                'Goalies win the Conn Smythe more than any other position — standing on his head in the playoffs is the ultimate narrative.',
+                'A forward who goes off for 15+ points in a run is almost a lock.',
+                'The Conn Smythe is about moments — overtime goals, shutouts, series-defining performances.'
+            ]
         }
     };
+
     const a = opinions[award];
-    return `<strong>${a.title}</strong><br><br>${a.body}`;
+    if (!a) return fallback(q);
+
+    return `<strong>${a.title}</strong><br><br>${a.body}<br>${breakdown('Key Factors', a.notes)}`;
 }
+
+// ============================================================
+// 11. tradeOpinion()
+// ============================================================
 
 function tradeOpinion(q) {
-    return `Trades and roster moves are where the real chess match happens in the NHL. ${q.includes('deadline') ? `The trade deadline is the most chaotic 24 hours in hockey — GMs are on the phone constantly, beat reporters are camped outside arenas, and every rumour feels like it could be real. The best deadline deals are the ones that address a specific need without gutting the prospect pool.` :
-        q.includes('free agent') || q.includes('signing') ? `Free agency in the NHL is a different beast than other sports. Most of the real movement happens in restricted free agency — teams matching offers, bridge deals, arbitration. Unrestricted free agency gets the headlines, but the smart teams do their best work before July 1st.` :
-            `The best trades in NHL history are the ones that look lopsided in hindsight. At the time, both sides thought they were winning. That's what makes the deadline and the draft so compelling — nobody really knows how it plays out until years later.`
-        }<br><br>I don't have live trade news, but for the latest moves and rumours, TSN and Sportsnet are your best bets — and Elliotte Friedman's 32 Thoughts column is basically required reading.`;
+    return `Trades and signings — the lifeblood of the offseason and the trade deadline. Here's how I think about roster moves:
+${breakdown('Trade Deadline Philosophy', [
+        'Buyers need to ask: does this move actually push us over the top, or are we just rearranging deck chairs?',
+        'Sellers should be aggressive — rental players rarely re-sign, so get the picks and prospects while you can.',
+        'The best trades are the ones that look lopsided at first but age well. Patience is a virtue in the NHL.',
+        'Cap retention is the secret weapon — teams can move expensive players by eating part of the salary.',
+        'Always follow the picks. A first-round pick is currency. Two firsts and a prospect? That\'s a franchise-altering deal.'
+    ])}
+<br>Want me to look up a specific player or team? Just ask — I can pull live stats and standings to give you context on any move.`;
 }
+
+// ============================================================
+// 12. generalOpinion() — with player comparison routing
+// ============================================================
 
 function generalOpinion(q) {
-    // Player comparisons
-    if ((q.includes('mckinnon') || q.includes('mackinnon')) && q.includes('mcdavid')) return playerComparison('mackinnon_mcdavid');
-    if (q.includes('matthews') && q.includes('mcdavid')) return playerComparison('matthews_mcdavid');
-    if (q.includes('crosby') && q.includes('mcdavid')) return playerComparison('crosby_mcdavid');
-    if (q.includes('ovechkin') && q.includes('gretzky')) return playerComparison('ovechkin_gretzky');
-    if (q.includes('best player') || q.includes('best in the world') || q.includes('best in the nhl')) return playerComparison('best_player');
-    if (q.includes('best team') || q.includes('cup favourite') || q.includes('cup favorite') || q.includes('win the cup') || q.includes('stanley cup')) return teamOpinion();
-    if (q.includes('overrated')) return `Overrated is a strong word in hockey — but if we're being honest, the most "overrated" players are usually guys who get massive contracts based on one great season and then settle into being solid but not elite. The NHL is littered with $8M cap hits that don't quite deliver. The truly elite players — McDavid, MacKinnon, Matthews — are actually <em>underrated</em> because no contract can capture what they bring on a nightly basis.`;
-    if (q.includes('underrated')) return `Underrated players are the backbone of every championship team. The guys who kill penalties, block shots, win faceoffs, and never show up on the highlight reel — those are the players coaches lose sleep over when they leave in free agency. Every Cup winner has three or four of those guys in the lineup.`;
+    const lq = q.toLowerCase();
 
-    const responses = [
-        `That's a great hockey take. Drop a more specific question — player comparison, award race, team outlook — and I'll give you a proper Rinkside breakdown on it. 🏒`,
-        `Good hockey debate. Get more specific and I'll dig in — player vs. player, award predictions, Cup contenders. That's where it gets fun.`
-    ];
-    return responses[Math.floor(Math.random() * responses.length)];
+    // Route to player comparisons first
+    if (match(lq, ['mackinnon']) && match(lq, ['mcdavid']))
+        return playerComparison('mackinnon_mcdavid');
+    if (match(lq, ['matthews']) && match(lq, ['mcdavid']))
+        return playerComparison('matthews_mcdavid');
+    if (match(lq, ['crosby']) && match(lq, ['mcdavid']))
+        return playerComparison('crosby_mcdavid');
+    if ((match(lq, ['ovechkin']) && match(lq, ['gretzky'])) || match(lq, ['ovi vs gretzky', 'gretzky vs ovi']))
+        return playerComparison('ovechkin_gretzky');
+    if (match(lq, ['best player', 'greatest player', 'best in the world', 'best player in the nhl', 'goat']))
+        return playerComparison('best_player');
+
+    // Generic opinion
+    return `Hot take incoming — hockey opinions are my bread and butter. Here's where I stand on the big picture:
+${breakdown('State of the Game', [
+        'The NHL is in a golden era of skill. The speed and skill level today is unlike anything we\'ve seen — McDavid, Makar, Matthews, MacKinnon are all playing at a level that would\'ve been science fiction 20 years ago.',
+        'Goaltending is the great equalizer. Any team with a hot goalie in April is dangerous — that\'s what makes the playoffs so unpredictable.',
+        'The salary cap has created parity. No dynasty lasts forever anymore — you build a window and you go for it.',
+        'Ask me something specific — player comparisons, award picks, Cup predictions. I\'ve got opinions on all of it.'
+    ])}`;
 }
 
-function playerComparison(matchup) {
+// ============================================================
+// 13. playerComparison()
+// ============================================================
+
+function playerComparison(key) {
     const comparisons = {
-        mackinnon_mcdavid: `<strong>MacKinnon vs. McDavid</strong> — the best debate in hockey right now 🏒<br><br>
-        Here's the honest take: <strong>McDavid is the best player on the planet</strong>, and it's not particularly close on pure skill. The speed, the hands, the vision — there's never been anyone who does what he does at even strength. He makes the impossible look routine.<br><br>
-        But <strong>MacKinnon's case is legitimate</strong>. He's the most complete player in the game — elite in all three zones, plays in every situation, competes harder than almost anyone, and has carried Colorado to a Stanley Cup. He's the guy you'd want if you needed one player to win you a series.<br><br>
-        The difference? McDavid makes you gasp. MacKinnon makes you win. Depending on what you value, you can make a case for either — and that's what makes this debate so good.<br><br>
-        <em>Friedman take: McDavid is the best player. MacKinnon is the best hockey player. There's a difference.</em>`,
+        mackinnon_mcdavid: `<strong>MacKinnon vs McDavid — the debate that never gets old.</strong><br><br>
+McDavid is the fastest human being to ever lace up skates. His edge work and acceleration are genuinely supernatural — he makes NHL defencemen look like pylons. But MacKinnon? He's the most complete player in the game. Stronger on pucks, better in his own end, and just as dangerous offensively. McDavid has the edge in pure skill ceiling, but MacKinnon has the Cup ring and the two-way game to back it up.
+${breakdown('The Verdict', [
+            'McDavid: best pure skater and puck-handler in NHL history. Generational talent.',
+            'MacKinnon: more complete player, better in all three zones, proven winner.',
+            'If you\'re building a team to win now? MacKinnon. If you want the most electrifying player alive? McDavid.',
+            'Both are top-3 players in NHL history by the time they\'re done. We\'re lucky to watch them both.'
+        ])}`,
 
-        matthews_mcdavid: `<strong>Matthews vs. McDavid</strong> — Toronto vs. Edmonton, the modern rivalry 🏒<br><br>
-        <strong>McDavid</strong> is the better all-around player — the skating, the playmaking, the ability to take over a game at will. He's the standard everyone else is measured against.<br><br>
-        But <strong>Matthews</strong> might be the purest goal scorer the NHL has seen in a generation. His shot release is the fastest in the league, his positioning is elite, and he's a legitimate 60-goal threat every season. If you need one goal in one game, Matthews might actually be your guy.<br><br>
-        McDavid wins the overall debate. But Matthews has carved out his own lane — and in a league that values goal scoring, that lane is worth a lot.<br><br>
-        <em>The real question is: would you rather have McDavid's ceiling or Matthews' consistency? Both answers are defensible.</em>`,
+        matthews_mcdavid: `<strong>Matthews vs McDavid — the great rivalry of this generation.</strong><br><br>
+Matthews is the most lethal goal scorer in the modern game. His shot is bar down from anywhere — wrist shot, one-timer, backhand, doesn't matter. He's a 60-goal scorer in a 60-goal era. McDavid is the better all-around player — more assists, more playmaking, more speed — but Matthews makes the argument that pure goal-scoring is its own superpower.
+${breakdown('The Verdict', [
+            'McDavid leads in points, assists, and skating — he\'s the better overall player by most metrics.',
+            'Matthews leads in goals and shooting percentage — nobody scores like him right now.',
+            'McDavid has more Hart Trophies. Matthews has a Cup ring. Both arguments are valid.',
+            'This rivalry is good for hockey. Two different styles, both elite, both must-watch every night.'
+        ])}`,
 
-        crosby_mcdavid: `<strong>Crosby vs. McDavid</strong> — the generational debate 🏒<br><br>
-        This one comes down to era and what you value. <strong>Crosby</strong> is the most complete player of his generation — three Stanley Cups, two Olympic golds, every major individual award. He changed how the game is played and did it while being the most physically targeted player in the league for 15 years.<br><br>
-        <strong>McDavid</strong> is doing things with the puck that Crosby never did. The pure skating ability, the top-end speed — it's a different kind of dominance.<br><br>
-        Peak for peak? McDavid might have the edge on pure skill. But Crosby's résumé — especially the playoff success — is the standard. Until McDavid wins a Cup, Crosby holds the edge in the all-time conversation.<br><br>
-        <em>Both answers are right. That's what makes it the best debate in hockey.</em>`,
+        crosby_mcdavid: `<strong>Crosby vs McDavid — the generational handoff debate.</strong><br><br>
+Crosby is the gold standard. Two Cups, three Hart Trophies, the most complete player of his era. He does everything — scores, sets up, wins faceoffs, plays in his own end, leads in the room. McDavid has the higher skill ceiling and is already putting up numbers that rival Crosby's best seasons. But Crosby has the hardware and the legacy.
+${breakdown('The Verdict', [
+            'Crosby: two Cups, three Harts, the most complete player of the 2000s. The benchmark.',
+            'McDavid: generationally faster, already has multiple scoring titles and Hart Trophies.',
+            'Crosby wins the legacy argument today. McDavid has time to close the gap.',
+            'Ask any scout — they\'d take either one first overall without blinking.'
+        ])}`,
 
-        ovechkin_gretzky: `<strong>Ovechkin vs. Gretzky</strong> — the goal scoring debate for the ages 🏒<br><br>
-        Ovechkin broke Gretzky's all-time goals record — a number that was supposed to be untouchable. That alone is one of the most remarkable achievements in sports history.<br><br>
-        But context matters: <strong>Gretzky's assist totals alone</strong> would make him the all-time points leader. He had 1,963 assists. Ovechkin has fewer total points than Gretzky has assists. The Great One played in a higher-scoring era, but the gap in playmaking is staggering.<br><br>
-        Ovechkin is the greatest goal scorer who ever lived. Gretzky is the greatest hockey player who ever lived. Those aren't the same thing — and both statements are true.`,
+        ovechkin_gretzky: `<strong>Ovechkin vs Gretzky — the goal-scoring GOAT debate.</strong><br><br>
+Gretzky's 894 goals is the record Ovechkin chased his whole career — and he got there. But Gretzky's 2,857 points is a different planet entirely. Ovi is the greatest goal scorer in NHL history, full stop. Gretzky is the greatest point producer, playmaker, and overall player. They're not really comparable — they're both the best at different things.
+${breakdown('The Verdict', [
+            'Gretzky: 2,857 points. His assist total alone beats every player\'s total points. Untouchable.',
+            'Ovechkin: broke the all-time goals record. The most prolific goal scorer the game has ever seen.',
+            'Gretzky wins the GOAT debate on total impact. Ovi wins the pure goal-scoring debate.',
+            'Both are once-in-a-century talents. The NHL was lucky to have them both.'
+        ])}`,
 
-        best_player: `<strong>Best player in the NHL right now?</strong> 🏒<br><br>
-        <strong>Connor McDavid</strong>. It's not a debate — it's a fact. He's won the Hart Trophy multiple times, leads the league in points in most seasons, and does things with the puck that make professional hockey players stop and stare.<br><br>
-        The conversation for second place is genuinely interesting: <strong>Nathan MacKinnon</strong> is the most complete player, <strong>Auston Matthews</strong> is the best pure goal scorer, and <strong>Leon Draisaitl</strong> — McDavid's linemate — would be the best player on 29 other teams.<br><br>
-        But McDavid is in a tier by himself. The only real debate is whether he's the best player of his generation or the best player ever. That conversation is already happening.`
+        best_player: `<strong>Best player in the NHL right now?</strong><br><br>
+Connor McDavid. It's not really a debate. He's won multiple Hart Trophies, multiple scoring titles, and he makes plays that literally no one else on the planet can make. But the conversation is richer than just one name.
+${breakdown('Top 5 Right Now', [
+            '1. Connor McDavid — the best player alive. Fastest, most skilled, most dominant.',
+            '2. Nathan MacKinnon — most complete player in the game. Cup winner. Two-way monster.',
+            '3. Auston Matthews — best goal scorer in the modern era. Lethal from anywhere.',
+            '4. Cale Makar — best defenceman in the world. Redefining the position.',
+            '5. Leon Draisaitl — elite scorer, elite playmaker, makes McDavid even better.'
+        ])}`
     };
 
-    return comparisons[matchup] || generalOpinion('');
+    return comparisons[key] || generalOpinion('opinion');
 }
+
+// ============================================================
+// 14. getCupPrediction() — live standings + analytical breakdown
+// ============================================================
 
 async function getCupPrediction() {
-    const data = await nhlFetch(`${NHL}/standings/now`);
-    const standings = data.standings;
-    const sorted = [...standings].sort((a, b) => b.points - a.points);
+    let teams = [];
+    try {
+        const data = await nhlFetch('/standings/now');
+        teams = data.standings || [];
+    } catch (_) {
+        return "Can't pull live standings right now — but my Cup pick is always the team with the hottest goalie in April. Ask me again in a sec!";
+    }
+
+    const sorted = [...teams].sort((a, b) => b.points - a.points);
     const top5 = sorted.slice(0, 5);
-    const leader = top5[0];
-    const leaderName = leader.teamName.default;
-    const east = standings.filter(t => t.conferenceName === 'Eastern').sort((a, b) => b.points - a.points);
-    const west = standings.filter(t => t.conferenceName === 'Western').sort((a, b) => b.points - a.points);
-    const eastLeader = east[0];
-    const westLeader = west[0];
 
-    let html = `<strong>Stanley Cup Prediction 🏆</strong><br><br>`;
-    html += `<strong>Top 5 in the league right now:</strong>
-    <table class="stat-table"><thead><tr><th>#</th><th>Team</th><th>PTS</th><th>W</th></tr></thead><tbody>`;
-    top5.forEach((t, i) => {
-        html += `<tr><td class="rank">${i + 1}</td><td class="team-name">${t.teamName.default}</td><td class="highlight">${t.points}</td><td>${t.wins}</td></tr>`;
-    });
-    html += `</tbody></table><br>`;
+    const rows = top5.map((t, i) => {
+        const name = t.teamName?.default || t.teamAbbrev?.default || 'Unknown';
+        const abbrev = t.teamAbbrev?.default || '';
+        const pts = t.points ?? 0;
+        const gp = t.gamesPlayed ?? 0;
+        const w = t.wins ?? 0;
+        return `<tr><td>${i + 1}</td><td><strong>${abbrev}</strong> ${name}</td><td>${gp}</td><td>${w}</td><td><strong>${pts}</strong></td></tr>`;
+    }).join('');
 
-    const ptGap = top5[0].points - top5[1].points;
-    const notes = [
-        `Right now, <strong>${leaderName}</strong> are the best team in hockey — ${top5[0].points} points, ${top5[0].wins} wins. ${ptGap > 8 ? `That ${ptGap}-point cushion over second place isn't an accident. This team has been the most consistent in the league.` : `But the gap at the top is tight — this race isn't over and the standings will look different by April.`}`,
+    const east = teams.filter(t => t.conferenceName === 'Eastern').sort((a, b) => b.points - a.points)[0];
+    const west = teams.filter(t => t.conferenceName === 'Western').sort((a, b) => b.points - a.points)[0];
+    const overall = sorted[0];
 
-        `In the <strong>Eastern Conference</strong>, <strong>${eastLeader.teamName.default}</strong> are the team to beat with ${eastLeader.points} points. In the <strong>West</strong>, <strong>${westLeader.teamName.default}</strong> are leading the pack at ${westLeader.points} points.`,
+    const overallName = overall?.teamName?.default || 'the top team';
+    const eastName = east?.teamName?.default || 'the East leader';
+    const westName = west?.teamName?.default || 'the West leader';
 
-        `Here's the honest Cup take: the regular season leader wins the Cup less than you'd think. The NHL playoffs are a completely different animal — best-of-seven series, tighter checking, goaltending that can steal a round. The team that's playing its best hockey in late May and June wins it, not the team that was best in November.`,
-
-        `What to watch: <strong>goaltending</strong> is the great equalizer. A hot goalie in April can carry a team four rounds. <strong>Special teams</strong> — power play and penalty kill — decide close series. And <strong>depth</strong> matters more in the playoffs than the regular season, because the fourth line gets real minutes when the schedule compresses to every other night.`,
-
-        `My pick based on where things stand right now: <strong>${leaderName}</strong> are the favourite, but I'd keep a close eye on <strong>${top5[1].teamName.default}</strong> and <strong>${top5[2].teamName.default}</strong> as legitimate threats. The dark horse? Whatever team gets hot at the right time and has a goalie standing on his head. That's always the story.`
-    ];
-
-    html += breakdown('Rinkside Cup Prediction', notes);
-    return html;
+    return `<strong>Stanley Cup Prediction — based on live standings</strong><br><br>
+Here are the top 5 teams in the league right now:
+<table style="width:100%;border-collapse:collapse;font-size:0.85em;margin:8px 0;">
+  <thead><tr style="border-bottom:1px solid #444;">
+    <th>#</th><th>Team</th><th>GP</th><th>W</th><th>PTS</th>
+  </tr></thead>
+  <tbody>${rows}</tbody>
+</table>
+${breakdown('Cup Breakdown', [
+        `${overallName} leads the league in points — they're the favourite on paper, but the regular season means nothing if you don't have a goalie who can steal games in April.`,
+        `In the East, ${eastName} has been the most consistent team. They've got the depth and the structure to go deep.`,
+        `In the West, ${westName} is the team everyone is watching. If their goaltending holds, they're dangerous.`,
+        'The Cup is decided by goaltending, special teams, and health. The best team in October rarely lifts it in June.',
+        'My formula: take the team with the best goalie, add a power play that clicks at 25%+, and give me a coach who can adjust between periods. That\'s your Cup winner.',
+        'Ask me about a specific team\'s outlook — I\'ll pull their schedule and standings and give you the real breakdown.'
+    ])}`;
 }
 
-function teamOpinion() {
+// ============================================================
+// 15. TEAM_MAP — all 32 NHL teams
+// ============================================================
 
-    // ── Player Search ──────────────────────────────────────────
-    async function searchPlayer(q) {
-        const cleaned = q.replace(/who is|tell me about|stats for|how is|how has|how many|player/g, '').trim();
-        if (!cleaned || cleaned.length < 2) return `Who are you looking for? Give me a name — first, last, or both — and I'll pull up their numbers.`;
-        const data = await nhlFetch(`https://search.d3.nhle.com/api/v1/search/player?culture=en-us&limit=5&q=${encodeURIComponent(cleaned)}&active=true`);
-        if (!data || data.length === 0) return `Couldn't find anyone matching "${cleaned}" on the active roster. Double-check the spelling — even Elliotte Friedman has to confirm names sometimes.`;
-        const pid = data[0].playerId;
-        const info = await nhlFetch(`${NHL}/player/${pid}/landing`);
-        const s = info.featuredStats?.regularSeason?.subSeason;
-        const isGoalie = info.position === 'G';
-        let statsHtml = '';
-        if (s) {
-            statsHtml = isGoalie
-                ? `<table class="stat-table"><thead><tr><th>GP</th><th>W</th><th>L</th><th>SV%</th><th>GAA</th><th>SO</th></tr></thead><tbody><tr><td>${s.gamesPlayed ?? '—'}</td><td>${s.wins ?? '—'}</td><td>${s.losses ?? '—'}</td><td class="highlight">${s.savePctg?.toFixed(3) ?? '—'}</td><td>${s.goalsAgainstAverage?.toFixed(2) ?? '—'}</td><td>${s.shutouts ?? '—'}</td></tr></tbody></table>`
-                : `<table class="stat-table"><thead><tr><th>GP</th><th>G</th><th>A</th><th>PTS</th><th>+/-</th><th>PIM</th></tr></thead><tbody><tr><td>${s.gamesPlayed ?? '—'}</td><td>${s.goals ?? '—'}</td><td>${s.assists ?? '—'}</td><td class="highlight">${s.points ?? '—'}</td><td>${s.plusMinus ?? '—'}</td><td>${s.pim ?? '—'}</td></tr></tbody></table>`;
-        }
-        const name = `${info.firstName?.default} ${info.lastName?.default}`;
-        const pts = s?.points ?? 0;
-        const svp = s?.savePctg ?? 0;
-        const notes = isGoalie
-            ? [`SV% of ${svp.toFixed(3)} tells the real story. ${svp > 0.930 ? "That's elite — this goalie is standing on his head." : svp > 0.915 ? "Solid starter numbers." : "Room to grow, but every goalie goes through stretches."}`, `GAA of ${s?.goalsAgainstAverage?.toFixed(2) ?? '—'} — ${(s?.goalsAgainstAverage ?? 3) < 2.5 ? "excellent. Giving up fewer than 2.5 goals a game is top-tier." : "league average. Needs to tighten up to be a true difference-maker."}`]
-            : [`${pts > 60 ? `${pts} points is a legitimate top-line season — this is one of the best players in the world right now.` : pts > 40 ? `${pts} points puts ${info.firstName?.default} in solid second-line territory — a real contributor.` : `Still building — keep an eye on the development curve.`}`, `+/- of ${s?.plusMinus ?? '—'} tells you how the team performs when ${info.firstName?.default} is on the ice. ${(s?.plusMinus ?? 0) > 10 ? "Positive impact — good things happen when this player is out there." : (s?.plusMinus ?? 0) < -10 ? "That's a number the coaching staff will want to address." : "Roughly even — solid two-way presence."}`];
-        return `<strong>${name}</strong> ${info.sweaterNumber ? `#${info.sweaterNumber}` : ''} — ${info.position} | ${info.fullTeamName?.default ?? ''}<br>
-    <span style="color:var(--text-muted);font-size:0.85rem">${info.currentAge ? `${info.currentAge} years old` : ''}${info.birthCountry ? ` · ${info.birthCountry}` : ''}</span><br><br>
-    <strong>This season:</strong>${statsHtml}<br>${breakdown('Rinkside Breakdown', notes)}`;
+const TEAM_MAP = {
+    // Atlantic
+    'boston bruins': 'BOS', 'bruins': 'BOS',
+    'buffalo sabres': 'BUF', 'sabres': 'BUF',
+    'detroit red wings': 'DET', 'red wings': 'DET',
+    'florida panthers': 'FLA', 'panthers': 'FLA',
+    'montreal canadiens': 'MTL', 'canadiens': 'MTL', 'habs': 'MTL',
+    'ottawa senators': 'OTT', 'senators': 'OTT', 'sens': 'OTT',
+    'tampa bay lightning': 'TBL', 'lightning': 'TBL', 'bolts': 'TBL',
+    'toronto maple leafs': 'TOR', 'maple leafs': 'TOR', 'leafs': 'TOR',
+    // Metropolitan
+    'carolina hurricanes': 'CAR', 'hurricanes': 'CAR', 'canes': 'CAR',
+    'columbus blue jackets': 'CBJ', 'blue jackets': 'CBJ',
+    'new jersey devils': 'NJD', 'devils': 'NJD',
+    'new york islanders': 'NYI', 'islanders': 'NYI',
+    'new york rangers': 'NYR', 'rangers': 'NYR',
+    'philadelphia flyers': 'PHI', 'flyers': 'PHI',
+    'pittsburgh penguins': 'PIT', 'penguins': 'PIT', 'pens': 'PIT',
+    'washington capitals': 'WSH', 'capitals': 'WSH', 'caps': 'WSH',
+    // Central
+    'arizona coyotes': 'ARI', 'coyotes': 'ARI', 'yotes': 'ARI',
+    'utah hockey club': 'UTA', 'utah': 'UTA',
+    'chicago blackhawks': 'CHI', 'blackhawks': 'CHI', 'hawks': 'CHI',
+    'colorado avalanche': 'COL', 'avalanche': 'COL', 'avs': 'COL',
+    'dallas stars': 'DAL', 'stars': 'DAL',
+    'minnesota wild': 'MIN', 'wild': 'MIN',
+    'nashville predators': 'NSH', 'predators': 'NSH', 'preds': 'NSH',
+    'st. louis blues': 'STL', 'blues': 'STL',
+    'winnipeg jets': 'WPG', 'jets': 'WPG',
+    // Pacific
+    'anaheim ducks': 'ANA', 'ducks': 'ANA',
+    'calgary flames': 'CGY', 'flames': 'CGY',
+    'edmonton oilers': 'EDM', 'oilers': 'EDM',
+    'los angeles kings': 'LAK', 'kings': 'LAK',
+    'san jose sharks': 'SJS', 'sharks': 'SJS',
+    'seattle kraken': 'SEA', 'kraken': 'SEA',
+    'vancouver canucks': 'VAN', 'canucks': 'VAN',
+    'vegas golden knights': 'VGK', 'golden knights': 'VGK', 'knights': 'VGK'
+};
+
+// ============================================================
+// 16. detectTeam()
+// ============================================================
+
+function detectTeam(lq) {
+    for (const [name, abbrev] of Object.entries(TEAM_MAP)) {
+        if (lq.includes(name)) return abbrev;
+    }
+    return null;
+}
+
+// ============================================================
+// 17. getTeamOutlook() — standings + schedule, playoff analysis
+// ============================================================
+
+async function getTeamOutlook(abbrev) {
+    let standingsData, scheduleData;
+    try {
+        [standingsData, scheduleData] = await Promise.all([
+            nhlFetch('/standings/now'),
+            nhlFetch(`/club-schedule-season/${abbrev}/now`)
+        ]);
+    } catch (_) {
+        return `Couldn't pull data for ${abbrev} right now — try again in a moment.`;
     }
 
-    // ── Rules & Lingo ──────────────────────────────────────────
-    function explainIcing() {
-        return `<strong>Icing</strong> — here's the deal 🚫<br><br>If a player shoots the puck from their own side of the red center line and it crosses the opposing goal line untouched, that's icing. Play stops, faceoff comes back to the defensive zone of the team that iced it.<br><br><strong>Why it exists:</strong> Stops teams from just chucking the puck 200 feet to kill time or relieve pressure.<br><br><strong>Exception:</strong> Shorthanded teams can ice the puck — one of the few advantages of killing a penalty.<br><br><em>Think of it like not being allowed to punt in football just to avoid pressure. Same energy.</em>`;
+    const standings = standingsData.standings || [];
+    const teamStanding = standings.find(t => t.teamAbbrev?.default === abbrev);
+
+    if (!teamStanding) {
+        return `Couldn't find standings data for ${abbrev}. Double-check the team name and try again.`;
     }
 
-    function explainOffside() {
-        return `<strong>Offside</strong> — the rule that causes more bar arguments than anything else 🚦<br><br>A player is offside if they enter the offensive zone before the puck does. Both skates have to be over the blue line after the puck crosses — one skate on the line counts as onside.<br><br><strong>Coach's challenge:</strong> Since 2015, coaches can challenge offside on goals. If a player was offside on the zone entry that led to the goal — even 30 seconds earlier — the goal gets waved off. Controversial? Absolutely.<br><br><em>Watch the linesman's eyes — they're tracking the puck and skates simultaneously. Toughest job on the ice.</em>`;
-    }
+    const name = teamStanding.teamName?.default || abbrev;
+    const pts = teamStanding.points ?? 0;
+    const gp = teamStanding.gamesPlayed ?? 0;
+    const w = teamStanding.wins ?? 0;
+    const l = teamStanding.losses ?? 0;
+    const ot = teamStanding.otLosses ?? 0;
+    const conf = teamStanding.conferenceName || 'Conference';
+    const div = teamStanding.divisionName || 'Division';
+    const divRank = teamStanding.divisionSequence ?? '?';
+    const confRank = teamStanding.conferenceSequence ?? '?';
+    const wildcardRank = teamStanding.wildcardSequence ?? '?';
 
-    function explainPenalties() {
-        return `<strong>Penalties & the Power Play</strong> — where games are won and lost ⚡<br><br>When a player commits a foul, they go to the box and their team plays shorthanded. The other team gets a <strong>power play</strong>.<br><br><strong>Common calls:</strong><br>• <em>Hooking</em> — using your stick to impede a player<br>• <em>Tripping</em> — taking a player down<br>• <em>High-sticking</em> — stick above the shoulders<br>• <em>Interference</em> — hitting a player without the puck<br>• <em>Slashing</em> — whacking someone's stick or body<br><br><strong>Minor</strong> = 2 min (ends early if PP scores). <strong>Major</strong> = 5 min (does NOT end early). A power play converting at 20%+ is elite.`;
-    }
+    // Next few games from schedule
+    const games = scheduleData.games || [];
+    const upcoming = games
+        .filter(g => g.gameState === 'FUT' || g.gameState === 'PRE')
+        .slice(0, 3);
 
-    function explainHatTrick() {
-        return `<strong>Hat Trick</strong> — one of the purest moments in hockey 🎩<br><br>Three goals by one player in a single game. Fans throw their hats on the ice — a tradition going back decades. The arena staff collects them all. Yes, really.<br><br><strong>Natural hat trick:</strong> Three consecutive goals, uninterrupted. Way rarer, way more impressive.<br><br><strong>Gordie Howe hat trick:</strong> A goal, an assist, AND a fight in the same game. Named after the legend himself. The ultimate power move.`;
-    }
+    const upcomingStr = upcoming.length
+        ? upcoming.map(g => {
+            const opp = g.awayTeam?.abbrev === abbrev ? g.homeTeam?.abbrev : g.awayTeam?.abbrev;
+            const loc = g.awayTeam?.abbrev === abbrev ? '@ ' : 'vs ';
+            const date = g.gameDate || '';
+            return `<li>${date} — ${loc}<strong>${opp}</strong></li>`;
+        }).join('')
+        : '<li>No upcoming games found</li>';
 
-    function explainLingo(q) {
-        const terms = {
-            'bar down': `<strong>Bar down</strong> 🚨 — When a shot hits the crossbar and drops straight into the net. Makes a distinct "ping" that every hockey fan lives for. Pure filth.`,
-            'top cheese': `<strong>Top cheese</strong> 🧀 — A shot that goes up high in the net, under the crossbar. "Cheese" = the top of the net. If someone went top cheese, the goalie had zero chance.`,
-            'celly': `<strong>Celly</strong> 🎉 — Short for celebration. From the subtle fist pump to the full-on dive across the ice, the celly is an art form.`,
-            'chirp': `<strong>Chirp</strong> 🗣️ — Trash talk on the ice. Hockey players are notorious chirpers. Getting chirped and not responding? That's a bad look.`,
-            'dangle': `<strong>Dangle</strong> 🏒 — A sick stickhandling move that dekes out a defender or goalie. "He dangled right through the defense" means he made everyone look silly.`,
-            'snipe': `<strong>Snipe</strong> 🎯 — A perfectly placed shot that beats the goalie clean. A sniper is a player known for shooting accuracy. Every team needs one.`,
-            'biscuit': `<strong>Biscuit</strong> 🏒 — The puck. "Put the biscuit in the basket" = score a goal.`,
-            'barn': `<strong>Barn</strong> 🏟️ — The arena. A packed barn with a rowdy crowd is one of the best atmospheres in sports.`,
-            'twig': `<strong>Twig</strong> 🏒 — A hockey stick. Old school term from when sticks were made of wood. Players are very particular about their twigs.`,
-            'wheel': `<strong>Wheel</strong> 🛞 — To skate fast. "He can wheel" means serious speed.`
-        };
-        for (const [term, explanation] of Object.entries(terms)) {
-            if (q.includes(term)) return explanation;
-        }
-        return fallback(q);
-    }
+    // Playoff analysis
+    const inPlayoffs = confRank <= 8;
+    const playoffStatus = inPlayoffs
+        ? `<span style="color:#4caf50;">✔ In a playoff spot</span> (${conf} rank: ${confRank})`
+        : `<span style="color:#c8102e;">✘ Outside playoff picture</span> (${conf} rank: ${confRank}, Wildcard: ${wildcardRank})`;
 
-    // ── Team Detection ─────────────────────────────────────────
-    const TEAM_MAP = {
-        'senators': 'OTT', 'ottawa': 'OTT',
-        'maple leafs': 'TOR', 'toronto': 'TOR', 'leafs': 'TOR',
-        'canadiens': 'MTL', 'montreal': 'MTL', 'habs': 'MTL',
-        'bruins': 'BOS', 'boston': 'BOS',
-        'sabres': 'BUF', 'buffalo': 'BUF',
-        'rangers': 'NYR', 'new york rangers': 'NYR',
-        'islanders': 'NYI', 'new york islanders': 'NYI',
-        'devils': 'NJD', 'new jersey': 'NJD',
-        'flyers': 'PHI', 'philadelphia': 'PHI',
-        'penguins': 'PIT', 'pittsburgh': 'PIT',
-        'capitals': 'WSH', 'washington': 'WSH', 'caps': 'WSH',
-        'hurricanes': 'CAR', 'carolina': 'CAR', 'canes': 'CAR',
-        'panthers': 'FLA', 'florida': 'FLA',
-        'lightning': 'TBL', 'tampa': 'TBL', 'tampa bay': 'TBL',
-        'jets': 'WPG', 'winnipeg': 'WPG',
-        'wild': 'MIN', 'minnesota': 'MIN',
-        'blackhawks': 'CHI', 'chicago': 'CHI', 'hawks': 'CHI',
-        'red wings': 'DET', 'detroit': 'DET',
-        'blue jackets': 'CBJ', 'columbus': 'CBJ',
-        'predators': 'NSH', 'nashville': 'NSH', 'preds': 'NSH',
-        'blues': 'STL', 'st. louis': 'STL', 'st louis': 'STL',
-        'avalanche': 'COL', 'colorado': 'COL', 'avs': 'COL',
-        'stars': 'DAL', 'dallas': 'DAL',
-        'coyotes': 'ARI', 'arizona': 'ARI', 'utah': 'UTA',
-        'sharks': 'SJS', 'san jose': 'SJS',
-        'kings': 'LAK', 'los angeles': 'LAK', 'la kings': 'LAK',
-        'ducks': 'ANA', 'anaheim': 'ANA',
-        'golden knights': 'VGK', 'vegas': 'VGK', 'knights': 'VGK',
-        'kraken': 'SEA', 'seattle': 'SEA',
-        'canucks': 'VAN', 'vancouver': 'VAN',
-        'flames': 'CGY', 'calgary': 'CGY',
-        'oilers': 'EDM', 'edmonton': 'EDM',
+    const ptsPace = gp > 0 ? ((pts / gp) * 82).toFixed(0) : 'N/A';
+
+    return `<strong>${name} — Season Outlook</strong><br><br>
+<table style="width:100%;border-collapse:collapse;font-size:0.85em;margin:6px 0;">
+  <tr><td><strong>Record</strong></td><td>${w}–${l}–${ot}</td></tr>
+  <tr><td><strong>Points</strong></td><td>${pts} (${gp} GP)</td></tr>
+  <tr><td><strong>Points Pace</strong></td><td>${ptsPace} pts over 82 games</td></tr>
+  <tr><td><strong>Division</strong></td><td>${div} (Rank: ${divRank})</td></tr>
+  <tr><td><strong>Playoff Status</strong></td><td>${playoffStatus}</td></tr>
+</table>
+<br><strong>Upcoming Games:</strong><ul>${upcomingStr}</ul>
+${breakdown('Analyst Take', [
+        inPlayoffs
+            ? `${name} is in the mix — ${pts} points and a ${conf} rank of ${confRank} puts them in the conversation. The question is whether they can hold on or push higher.`
+            : `${name} is on the outside looking in right now. They need to string wins together fast — every point matters at this stage of the season.`,
+        `At a ${ptsPace}-point pace over 82 games, you get a sense of where this team is trending.`,
+        'Goaltending and special teams will decide if they make a run. Ask me about their division rivals or Cup contenders!'
+    ])}`;
+}
+
+// ============================================================
+// 18. explainSalaryCap()
+// ============================================================
+
+function explainSalaryCap() {
+    return `The NHL salary cap is the great equalizer — every team has the same ceiling, which is what makes the league so competitive.
+${breakdown('Salary Cap 101', [
+        'The cap ceiling is set each summer based on league revenues. Teams cannot exceed it at any point during the season.',
+        'Cap hit is the average annual value (AAV) of a contract — a 5-year, $50M deal has a $10M cap hit per year.',
+        'LTIR (Long-Term Injured Reserve) allows teams to exceed the cap if a player with a cap hit ≥ $3,900 is injured for 10+ games and 24+ days. It\'s a loophole teams use aggressively.',
+        'Buyouts let teams terminate a contract early, but they still count against the cap at a reduced rate for twice the remaining contract length.',
+        'Cap space is the difference between the cap ceiling and a team\'s current commitments. Teams need to keep enough space to sign their roster.',
+        'The cap floor is the minimum teams must spend — usually about $20M below the ceiling. Small-market teams sometimes struggle to hit it.'
+    ])}`;
+}
+
+// ============================================================
+// 19. explainDraft()
+// ============================================================
+
+function explainDraft() {
+    return `The NHL Draft is where franchises are built — or rebuilt. It's the most important event of the offseason.
+${breakdown('NHL Draft Explained', [
+        'The draft has 7 rounds. Teams pick in reverse order of the previous season\'s standings — worst team picks first.',
+        'The Draft Lottery determines the top picks. The 16 teams that missed the playoffs enter, with the worst teams getting the best odds. No team can win the lottery more than twice in a row.',
+        'First-round picks are gold. A top-10 pick can change a franchise. Teams trade picks years in advance to move up or acquire talent.',
+        'European players (especially Russians and Swedes) have historically been undervalued in early rounds — that\'s changed significantly.',
+        'Goalies are notoriously hard to project. Most teams avoid taking a goalie in the first round.',
+        'The best drafts in history produced multiple Hall of Famers. The 2003 draft (Crosby year) is considered the greatest ever.'
+    ])}`;
+}
+
+// ============================================================
+// 20. explainPlayoffs()
+// ============================================================
+
+function explainPlayoffs() {
+    return `The NHL playoffs are the most intense postseason in professional sports. Here's how it works:
+${breakdown('Playoff Format', [
+        '16 teams qualify — 8 from each conference. The top 3 teams in each division get automatic spots, plus 2 wildcards per conference.',
+        'Round 1: Division matchups. 1st in division vs 2nd wildcard, 2nd in division vs 1st wildcard. Best-of-7.',
+        'Round 2 (Conference Semifinals): Division winners face each other. Best-of-7.',
+        'Round 3 (Conference Finals): One team from each conference advances. Best-of-7.',
+        'Stanley Cup Final: East vs West. Best-of-7. The winner gets the Cup.',
+        'Home ice advantage goes to the higher seed. In a Game 7, home ice matters enormously.',
+        'Overtime in the playoffs is sudden death — no shootouts. They play until someone scores, no matter how long it takes. The longest game in history went 6 OT periods.'
+    ])}`;
+}
+
+// ============================================================
+// 21. explainShootout()
+// ============================================================
+
+function explainShootout() {
+    return `The shootout — hockey's version of a penalty shootout, and just as controversial.
+${breakdown('How the Shootout Works', [
+        'If a game is tied after 60 minutes of regulation, teams play a 5-minute 3-on-3 overtime period.',
+        'If still tied after OT, it goes to a shootout. Each team selects 3 shooters who go one-on-one against the goalie.',
+        'The team with more goals after 3 rounds wins. If still tied, it goes to sudden death — one shooter per team until someone scores and the other doesn\'t.',
+        'Coaches choose their shooters strategically — some guys are elite in shootouts, others fall apart under pressure.',
+        'A shootout win counts as 2 points in the standings. The losing team gets 1 point (the OT loss point).',
+        'Purists hate the shootout — they\'d rather play 4-on-4 or 3-on-3 until someone scores. The debate never ends.'
+    ])}`;
+}
+
+// ============================================================
+// 22. explainFighting()
+// ============================================================
+
+function explainFighting() {
+    return `Fighting in hockey — one of the most debated topics in the sport.
+${breakdown('Fighting in the NHL', [
+        'Fighting is technically illegal but tolerated under Rule 46. Players who fight receive a 5-minute major penalty.',
+        'The enforcer role has largely disappeared from the modern NHL. Cap constraints mean teams can\'t afford to carry a player whose only job is to fight.',
+        'Historically, fighting served as "self-policing" — players would answer for dirty hits with their fists. The code was real.',
+        'Today, supplemental discipline (suspensions and fines from the Department of Player Safety) has replaced much of that role.',
+        'Staged fights — two willing combatants dropping the gloves — are rare now. Most fights happen organically after a big hit.',
+        'The debate: does fighting protect skilled players, or is it just violence for entertainment? The league has quietly let it fade without banning it outright.'
+    ])}`;
+}
+
+// ============================================================
+// 23. explainLines()
+// ============================================================
+
+function explainLines() {
+    return `Line combinations are the chess match within the game — coaches spend hours getting them right.
+${breakdown('Forward Lines & Defence Pairs', [
+        'Teams dress 12 forwards (4 lines of 3) and 6 defencemen (3 pairs). Lines rotate every 45–60 seconds.',
+        'The first line is your best offensive unit — usually your top centre flanked by two wingers. This is where your stars play.',
+        'The second line is your secondary scoring threat. A good second line is the difference between a contender and a pretender.',
+        'The third line is typically a two-way checking line — responsible, defensive, but can chip in offensively.',
+        'The fourth line is the energy line — physical, hard-working, and there to change the momentum. They don\'t play much but their shifts matter.',
+        'Line matching is when coaches try to get their best line against the opponent\'s worst, or their checking line against the opponent\'s stars. Home teams have last change, which is a huge advantage.',
+        'Defence pairs: top pair handles the toughest minutes, second pair is solid two-way, third pair is sheltered.'
+    ])}`;
+}
+
+// ============================================================
+// 24. explainFaceoffs()
+// ============================================================
+
+function explainFaceoffs() {
+    return `Faceoffs — the most underrated skill in hockey, and one of the most important.
+${breakdown('Faceoffs Explained', [
+        'A faceoff starts play after a stoppage. The referee drops the puck between two opposing centres.',
+        'There are 9 faceoff dots on the ice — one at centre, two in each zone\'s corners, and two in the neutral zone.',
+        'Winning a faceoff in your own zone means your team gets possession and can clear the puck. Losing it means the opponent can set up their power play or cycle.',
+        'Elite faceoff men win 55–60% of their draws. That\'s a massive edge over a full game.',
+        'Technique matters: hand position, body leverage, reading the linesman\'s drop, and quick hands all factor in.',
+        'Teams with dominant faceoff centres (like Patrice Bergeron was) have a structural advantage — they start more possessions on their terms.'
+    ])}`;
+}
+
+// ============================================================
+// 25. explainIcing()
+// ============================================================
+
+function explainIcing() {
+    return `Icing — one of the most fundamental rules in hockey, and one that trips up new fans.
+${breakdown('Icing Explained', [
+        'Icing is called when a player shoots the puck from their own side of the red centre line and it crosses the opposing team\'s goal line untouched.',
+        'When icing is called, play stops and the faceoff comes back to the offending team\'s defensive zone.',
+        'The NHL uses "hybrid icing" — a linesman waves off icing if the defending player can reach the puck first. This prevents dangerous races to the boards.',
+        'Icing is NOT called if: the team is shorthanded (killing a penalty), the goalie touches the puck, or the referee judges the defending player could have played the puck.',
+        'Teams use icing intentionally to relieve pressure when killing a penalty — it\'s one of the few times it\'s a smart play.',
+        'Repeated icings are exhausting for the team doing it — you can\'t change lines after an icing call, so tired players stay on the ice.'
+    ])}`;
+}
+
+// ============================================================
+// 26. explainOffside()
+// ============================================================
+
+function explainOffside() {
+    return `Offside — the rule that keeps the game honest and prevents cherry-picking.
+${breakdown('Offside Explained', [
+        'A player is offside if they enter the attacking zone (cross the blue line) before the puck does.',
+        'The puck must fully cross the blue line before any attacking player. If a player\'s skate is in the zone before the puck, it\'s offside.',
+        'When offside is called, play stops and the faceoff comes back to the neutral zone.',
+        'The "delayed offside" rule: if a player enters the zone early but the puck hasn\'t crossed yet, the linesman raises his arm. If the attacking team clears the zone before touching the puck, play continues.',
+        'Video review can be used to challenge offside calls on goals — if a player was offside before the goal, the goal is disallowed.',
+        'The offside rule prevents players from camping in the offensive zone waiting for a long pass — it forces teams to carry the puck in together.'
+    ])}`;
+}
+
+// ============================================================
+// 27. explainPenalties()
+// ============================================================
+
+function explainPenalties() {
+    return `Penalties and the power play — where games are won and lost.
+${breakdown('Penalties & Power Plays', [
+        'A minor penalty sends a player to the box for 2 minutes. Their team plays shorthanded (4-on-5). If the power play scores, the penalty ends early.',
+        'A major penalty is 5 minutes and does NOT end early if the power play scores. Usually called for fighting or serious infractions.',
+        'A misconduct is 10 minutes but the team does NOT play shorthanded — a replacement comes on.',
+        'A game misconduct ejects the player for the rest of the game.',
+        'The power play (PP) is when a team has a one-man advantage. Elite PP units convert at 25–30% — that\'s a massive edge.',
+        'The penalty kill (PK) is the shorthanded team\'s defence. Great PK units kill 85%+ of penalties.',
+        'Common penalties: hooking, holding, tripping, interference, high-sticking, slashing, cross-checking, delay of game.',
+        'The "too many men" penalty is one of the most embarrassing — it means a team had too many players on the ice during a line change.'
+    ])}`;
+}
+
+// ============================================================
+// 28. explainHatTrick()
+// ============================================================
+
+function explainHatTrick() {
+    return `The hat trick — one of hockey's most celebrated moments.
+${breakdown('Hat Trick Explained', [
+        'A hat trick is when a player scores 3 goals in a single game. Fans throw their hats onto the ice to celebrate.',
+        'The tradition of throwing hats dates back to the 1940s — a Toronto haberdasher offered a free hat to any player who scored 3 goals.',
+        'A "natural hat trick" is three consecutive goals by the same player, with no other goals scored in between. Much rarer and more impressive.',
+        'A "Gordie Howe hat trick" is a goal, an assist, AND a fight in the same game — named after the legendary Gordie Howe.',
+        'The NHL record for hat tricks in a career is held by Wayne Gretzky with 50.',
+        'When a player scores 4 goals, it\'s sometimes called a "Texas hat trick" — though that term is more common in soccer.'
+    ])}`;
+}
+
+// ============================================================
+// 29. explainLingo()
+// ============================================================
+
+function explainLingo(q) {
+    const lq = q.toLowerCase();
+
+    const terms = {
+        'bar down': '<strong>Bar down</strong> — when a shot hits the crossbar and goes straight down into the net. One of the most satisfying goals in hockey. Pure top cheese.',
+        'top cheese': '<strong>Top cheese</strong> (also "top shelf", "top cheddar") — a shot that goes into the top of the net, just under the crossbar. Where mama hides the cookies.',
+        'celly': '<strong>Celly</strong> — short for "celebration". What a player does after scoring. Can range from a simple fist pump to an elaborate choreographed routine.',
+        'chirp': '<strong>Chirp</strong> — trash talk on the ice. Players chirp each other constantly. The best chirpers are an art form.',
+        'dangle': '<strong>Dangle</strong> — a fancy stickhandling move to beat a defender. "He dangled right through the whole defence."',
+        'snipe': '<strong>Snipe</strong> — a perfectly placed shot, usually top corner. "He sniped it bar down, top cheese." A sniper is a player known for their shot.',
+        'biscuit': '<strong>Biscuit</strong> — the puck. "He put the biscuit in the basket."',
+        'barn': '<strong>Barn</strong> — the arena. "Packed barn tonight in Toronto."',
+        'apple': '<strong>Apple</strong> — an assist. "He had two apples on that goal."',
+        'beauty': '<strong>Beauty</strong> — a compliment. A great player, a great play, or a great person. "What a beauty."',
+        'wheel': '<strong>Wheel</strong> — to skate fast. "He can really wheel."',
+        'twig': '<strong>Twig</strong> — a hockey stick.',
+        'lid': '<strong>Lid</strong> — a helmet.',
+        'bucket': '<strong>Bucket</strong> — also a helmet.',
+        'flow': '<strong>Flow</strong> — long, beautiful hockey hair flowing out the back of the helmet. A rite of passage.',
+        'gongshow': '<strong>Gongshow</strong> — a chaotic, wild game or situation. "That third period was a total gongshow."',
+        'barn burner': '<strong>Barn burner</strong> — a high-scoring, exciting game.',
+        'standing on his head': '<strong>Standing on his head</strong> — a goalie making incredible saves, keeping his team in the game against all odds.',
+        'between the pipes': '<strong>Between the pipes</strong> — in goal. The goalposts are the "pipes".',
+        'backstop': '<strong>Backstop</strong> — the goalie.',
+        'netminder': '<strong>Netminder</strong> — another word for goalie.',
+        'blueliner': '<strong>Blueliner</strong> — a defenceman (they play near the blue line).',
+        'd-man': '<strong>D-man</strong> — defenceman.',
+        'enforcer': '<strong>Enforcer</strong> — a player whose primary role is physical intimidation and fighting. Largely extinct in the modern NHL.',
+        'grinder': '<strong>Grinder</strong> — a hard-working, physical player who doesn\'t score much but contributes in other ways.',
+        'plug': '<strong>Plug</strong> — a bad player. Not a compliment.',
+        'pigeon': '<strong>Pigeon</strong> — a player who benefits from playing with better teammates but can\'t produce on their own.',
+        'tape to tape': '<strong>Tape to tape</strong> — a perfect pass, from one player\'s stick tape directly to another\'s.',
+        'breakaway': '<strong>Breakaway</strong> — when a player gets behind the defence and goes one-on-one with the goalie.',
+        'odd-man rush': '<strong>Odd-man rush</strong> — when the attacking team has more players than defenders on a rush (2-on-1, 3-on-2).',
+        'cycle': '<strong>Cycle</strong> — when a team maintains possession in the offensive zone by moving the puck along the boards in a circular pattern.',
+        'forecheck': '<strong>Forecheck</strong> — aggressive pressure in the offensive zone to win the puck back.',
+        'backcheck': '<strong>Backcheck</strong> — forwards skating back to help defend against an opposing rush.',
+        'neutral zone trap': '<strong>Neutral zone trap</strong> — a defensive system where a team clogs the neutral zone to prevent odd-man rushes. Effective but boring to watch.',
     };
 
-    function detectTeam(q) {
-        for (const [name, abbrev] of Object.entries(TEAM_MAP)) {
-            if (q.includes(name)) return abbrev;
-        }
-        return null;
+    // Check if a specific term was asked about
+    for (const [term, def] of Object.entries(terms)) {
+        if (lq.includes(term)) return def;
     }
 
-    // ── Team Playoff Outlook ───────────────────────────────────
-    async function getTeamOutlook(abbrev) {
-        const [standingsData, scheduleData] = await Promise.all([
-            nhlFetch(`${NHL}/standings/now`),
-            nhlFetch(`${NHL}/club-schedule-season/${abbrev}/now`)
-        ]);
+    // Return a glossary of common terms
+    const glossary = ['bar down', 'top cheese', 'celly', 'chirp', 'dangle', 'snipe', 'biscuit', 'beauty', 'flow', 'standing on his head', 'between the pipes', 'gongshow'];
+    const entries = glossary.map(t => `<li>${terms[t]}</li>`).join('');
 
-        const standings = standingsData.standings;
-        const team = standings.find(t => t.teamAbbrev.default === abbrev);
+    return `Hockey has its own language — here are some of the classics:<br><ul>${entries}</ul><br>Ask me about any specific term for a deeper breakdown!`;
+}
 
-        if (!team) return `Couldn't pull up that team's data right now — try again in a sec.`;
+// ============================================================
+// 30. searchPlayer()
+// ============================================================
 
-        const teamName = team.teamName.default;
-        const pts = team.points;
-        const gp = team.gamesPlayed;
-        const gamesLeft = 82 - gp;
-        const maxPts = pts + (gamesLeft * 2);
-        const divisionTeams = standings.filter(t => t.divisionName === team.divisionName)
-            .sort((a, b) => b.points - a.points);
-        const divRank = divisionTeams.findIndex(t => t.teamAbbrev.default === abbrev) + 1;
+async function searchPlayer(q) {
+    // Extract a likely player name — strip common filler words
+    const cleaned = q.replace(/who is|tell me about|stats for|stats on|how is|how about|what about|player/gi, '').trim();
+    if (!cleaned || cleaned.length < 3) return fallback(q);
 
-        // Find wild card cutoff in conference
-        const confTeams = standings
-            .filter(t => t.conferenceName === team.conferenceName)
-            .sort((a, b) => b.points - a.points);
-        const wcCutoff = confTeams[7]?.points ?? 0;
-        const confRank = confTeams.findIndex(t => t.teamAbbrev.default === abbrev) + 1;
-        const ptsBehind = wcCutoff - pts;
-        const inPlayoffPosition = confRank <= 8;
+    const encoded = encodeURIComponent(cleaned);
+    let players = [];
 
-        // Get next few games
-        const upcoming = scheduleData?.games
-            ?.filter(g => g.gameState === 'FUT' || g.gameState === 'PRE')
-            ?.slice(0, 4) ?? [];
+    try {
+        const searchUrl = `https://search.d3.nhle.com/api/v1/search/player?culture=en-us&limit=5&q=${encoded}&active=true`;
+        const encodedSearch = encodeURIComponent(searchUrl);
 
-        let html = `<strong>${teamName} — Playoff Outlook</strong><br><br>`;
-        html += `<table class="stat-table"><thead><tr><th>GP</th><th>W</th><th>L</th><th>OTL</th><th>PTS</th><th>Div Rank</th></tr></thead><tbody>
-        <tr><td>${gp}</td><td>${team.wins}</td><td>${team.losses}</td><td>${team.otLosses}</td><td class="highlight">${pts}</td><td>${divRank}</td></tr>
-    </tbody></table><br>`;
+        let searchData;
+        // Try allorigins
+        try {
+            const res = await fetch(`https://api.allorigins.win/get?url=${encodedSearch}`);
+            if (res.ok) {
+                const d = await res.json();
+                searchData = JSON.parse(d.contents);
+            }
+        } catch (_) { }
 
-        // Upcoming games
-        if (upcoming.length) {
-            html += `<strong>Upcoming Games</strong><br>`;
-            upcoming.forEach(g => {
-                const isHome = g.homeTeam?.abbrev === abbrev;
-                const opp = isHome ? g.awayTeam?.abbrev : g.homeTeam?.abbrev;
-                const date = new Date(g.startTimeUTC).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-                html += `<div style="font-size:0.85rem;padding:0.4rem 0;border-bottom:1px solid var(--border)">
-                ${date} — ${isHome ? 'vs' : '@'} <strong>${opp}</strong>
-            </div>`;
-            });
-            html += `<br>`;
+        // Fallback: corsproxy
+        if (!searchData) {
+            try {
+                const res = await fetch(`https://corsproxy.io/?${encodedSearch}`);
+                if (res.ok) searchData = await res.json();
+            } catch (_) { }
         }
 
-        // Analytical breakdown
-        const notes = [];
-
-        if (inPlayoffPosition) {
-            notes.push(`<strong>${teamName} are currently IN a playoff spot</strong> — sitting ${confRank === 1 ? 'atop the conference' : `${confRank}${confRank === 2 ? 'nd' : confRank === 3 ? 'rd' : 'th'} in the conference`} with ${pts} points. The job right now is to protect that position, not chase it.`);
-        } else {
-            notes.push(`<strong>${teamName} are currently OUTSIDE the playoff picture</strong> — sitting ${confRank}${confRank > 3 ? 'th' : confRank === 2 ? 'nd' : 'rd'} in the conference, ${ptsBehind} point${ptsBehind === 1 ? '' : 's'} back of the final wild card spot. That's a real gap to close.`);
+        // Fallback: direct
+        if (!searchData) {
+            const res = await fetch(searchUrl);
+            if (res.ok) searchData = await res.json();
         }
 
-        if (gamesLeft > 0) {
-            notes.push(`With ${gamesLeft} games left, the maximum points they can earn is ${maxPts}. ${maxPts < wcCutoff + 10 ? `The math is getting tight — they need to go on a run, and they need help from teams ahead of them to stumble.` : `There's still plenty of runway here — but they need to start banking points now, not later.`}`);
-        }
-
-        if (upcoming.length) {
-            notes.push(`The next stretch of games is critical. Every game from here on is essentially a playoff game — the standings are too tight to give away points against anyone. Look at those upcoming matchups: ${upcoming.map(g => {
-                const isHome = g.homeTeam?.abbrev === abbrev;
-                const opp = isHome ? g.awayTeam?.abbrev : g.homeTeam?.abbrev;
-                return `${isHome ? 'vs' : '@'} ${opp}`;
-            }).join(', ')}. Those results will tell you a lot about where this team is headed.`);
-        }
-
-        notes.push(`${inPlayoffPosition
-            ? `Bottom line: ${teamName} control their own destiny right now. Stay healthy, keep the power play clicking, and don't give points away in overtime. That's the formula.`
-            : `Bottom line: ${teamName} need a sustained run — not just one good week. In the NHL, ${ptsBehind > 6 ? `${ptsBehind} points is a significant hole. It's not impossible, but they need to be near-perfect the rest of the way.` : `${ptsBehind} points is very much closeable — one good week and they're right back in it. But there's no margin for error.`}`
-            }`);
-
-        html += breakdown(`${teamName} Playoff Breakdown`, notes);
-        return html;
+        players = Array.isArray(searchData) ? searchData : [];
+    } catch (_) {
+        return `Couldn't search for "${cleaned}" right now — the scouting report is delayed. Try again in a moment.`;
     }
 
-    function explainSalaryCap() {
-        return `<strong>The NHL Salary Cap</strong> — the great equalizer 💰<br><br>
-    Every NHL team has a maximum amount they can spend on player salaries in a given season — that's the salary cap. It's set each summer based on league revenues and goes up (or occasionally down) year to year. Right now it sits around <strong>$88 million USD</strong>.<br><br>
-    <strong>Cap hit</strong> = a player's average annual value of their contract. A 4-year, $40M deal has a $10M cap hit — it counts $10M against the cap every year regardless of the actual year-by-year salary.<br><br>
-    <strong>Why it matters:</strong> Every team has the same ceiling. You can't just outspend everyone like in baseball. The cap forces GMs to make hard decisions — do you pay your star centre $12M or spread that money across three solid players? Those choices define franchises for years.<br><br>
-    <strong>Cap space</strong> = how much room a team has left to sign players. Teams over the cap can't ice a roster — so managing cap space is one of the most important jobs in hockey operations.<br><br>
-    <em>The best GMs in the league are the ones who find value — players outperforming their cap hit. That's how you build a contender without breaking the bank.</em>`;
+    if (!players.length) {
+        return `Couldn't find a player matching "<strong>${cleaned}</strong>". Try their full name — e.g. "Connor McDavid" or "Nathan MacKinnon".`;
     }
 
-    function explainDraft() {
-        return `<strong>The NHL Draft</strong> — where futures are built 🎓<br><br>
-    Every June, NHL teams select amateur players (mostly 18-year-olds) in a seven-round draft. The order is determined by the previous season's standings — worst teams pick first, best teams pick last.<br><br>
-    <strong>The Draft Lottery:</strong> The bottom teams don't automatically get the first pick — there's a lottery among the non-playoff teams to determine the top picks. It was designed to prevent teams from intentionally losing (tanking) to get a better pick.<br><br>
-    <strong>Why the first round matters so much:</strong> First-round picks — especially top-10 picks — are the lifeblood of rebuilding teams. A franchise centre or elite defenceman taken in the top five can change an organization for a decade. That's why teams guard their first-round picks fiercely in trades.<br><br>
-    <strong>Rounds 2-7:</strong> Most players drafted outside the first round never play an NHL game. But every team has stories of late-round steals — players who became stars despite being overlooked. Those picks are why scouts matter.<br><br>
-    <em>The draft is where patience pays off. The best rebuilds are built on high picks, smart development, and not rushing prospects before they're ready.</em>`;
+    const player = players[0];
+    const pid = player.playerId;
+    const fullName = `${player.name || cleaned}`;
+
+    // Fetch player landing page
+    let landing;
+    try {
+        landing = await nhlFetch(`/player/${pid}/landing`);
+    } catch (_) {
+        return `Found <strong>${fullName}</strong> but couldn't load their full profile right now. Try again shortly.`;
     }
 
-    function explainPlayoffs() {
-        return `<strong>NHL Playoff Format</strong> — the best postseason in sports 🏆<br><br>
-    16 teams make the playoffs — 8 from each conference (Eastern and Western). Here's how the bracket works:<br><br>
-    <strong>Division winners (1st & 2nd seeds):</strong> The top two teams in each division are seeded 1 and 2 in their conference bracket.<br><br>
-    <strong>Wild card spots:</strong> The next two best records in each conference — regardless of division — grab the wild card spots (seeds 3 and 4 in the bracket).<br><br>
-    <strong>The bracket:</strong> 1 vs. WC2, 2 vs. WC1, and the two division runners-up play each other. Best-of-seven series all the way through — first to four wins advances.<br><br>
-    <strong>Why best-of-seven is special:</strong> It's long enough that the better team usually wins, but short enough that a hot goalie or a momentum swing can flip everything. One bad game doesn't end your season. One great game can define it.<br><br>
-    <strong>Home ice advantage:</strong> The higher seed hosts Games 1, 2, 5, and 7. In a tight series, home ice matters — the crowd, the familiar rink, the travel advantage.<br><br>
-    <em>The Stanley Cup Playoffs are 16 teams, four rounds, and two months of the most intense hockey of the year. Nothing else comes close.</em>`;
-    }
+    const info = landing;
+    const firstName = info.firstName?.default || '';
+    const lastName = info.lastName?.default || '';
+    const name = `${firstName} ${lastName}`.trim() || fullName;
+    const pos = info.position || '?';
+    const team = info.currentTeamAbbrev || info.teamAbbrev || 'N/A';
+    const jersey = info.sweaterNumber || '?';
+    const nationality = info.birthCountry || '';
+    const birthCity = info.birthCity?.default || '';
+    const birthDate = info.birthDate || '';
+    const heightCm = info.heightInCentimeters || '';
+    const weightLbs = info.weightInPounds || '';
 
-    function explainShootout() {
-        return `<strong>The Shootout</strong> — hockey's most dramatic tiebreaker 🎯<br><br>
-    If a game is tied after regulation (60 minutes) and a 5-minute overtime period, it goes to a shootout. Three shooters per team take penalty shots — one-on-one against the goalie. Most goals after three rounds wins. If still tied, it goes sudden death — one shooter per team until someone scores and the other doesn't.<br><br>
-    <strong>Overtime:</strong> The 5-minute OT period is 3-on-3 — way more open than regulation hockey. It was introduced to create more scoring chances and reduce shootouts. It works — most OT games end before the shootout.<br><br>
-    <strong>Points:</strong> A regulation win = 2 points. An OT or shootout win = 2 points. An OT or shootout loss = 1 point (the "loser point"). That loser point is why the standings can get complicated — teams can accumulate points without winning in regulation.<br><br>
-    <em>Shootout specialists are a real thing — some players are ice cold under pressure, others thrive. Coaches keep mental notes on who they trust when it matters most.</em>`;
-    }
+    const season = info.featuredStats?.regularSeason?.subSeason || info.featuredStats?.regularSeason?.career || {};
+    const gp = season.gamesPlayed ?? '—';
+    const goals = season.goals ?? '—';
+    const assists = season.assists ?? '—';
+    const pts = season.points ?? '—';
+    const plusMinus = season.plusMinus ?? '—';
 
-    function explainFighting() {
-        return `<strong>Fighting in Hockey</strong> — the most debated topic in the sport 🥊<br><br>
-    Unlike other major sports, fighting is not automatically a game misconduct in the NHL. Two players who mutually agree to fight receive a 5-minute major penalty each and are sent to the box — but they stay in the game.<br><br>
-    <strong>The enforcer role:</strong> For decades, teams carried "enforcers" — players whose primary job was to fight, protect star players, and intimidate opponents. That role has largely disappeared from the modern NHL as the game has gotten faster and rosters have gotten smaller.<br><br>
-    <strong>Why it still happens:</strong> A fight can shift momentum, energize a bench, or send a message after a dirty hit on a teammate. Players police the game themselves — it's part of the culture.<br><br>
-    <strong>The debate:</strong> Fighting has declined significantly over the past 20 years. Some fans love it as part of hockey's identity. Others argue it has no place in a modern sport. The NHL has never banned it outright — it remains one of the sport's most unique and controversial features.<br><br>
-    <em>One thing everyone agrees on: the code matters. You don't fight someone who doesn't want to fight. That's the line.</em>`;
-    }
+    // Goalie stats
+    const svPct = season.savePctg != null ? (season.savePctg * 100).toFixed(2) + '%' : null;
+    const gaa = season.goalsAgainstAverage != null ? season.goalsAgainstAverage.toFixed(2) : null;
+    const wins = season.wins ?? '—';
 
-    function explainLines() {
-        return `<strong>Hockey Lines & Pairings</strong> — how rosters are built 📋<br><br>
-    NHL teams dress 12 forwards and 6 defencemen (plus 2 goalies). Forwards are grouped into four lines of three; defencemen into three pairs.<br><br>
-    <strong>The four forward lines:</strong><br>
-    • <em>First line</em> — your best offensive players. The stars. They get the most ice time and face the toughest matchups.<br>
-    • <em>Second line</em> — strong contributors, often a mix of skill and two-way play. Good teams have a second line that can score.<br>
-    • <em>Third line</em> — typically a checking line. Responsible, defensive, physical. They make life hard for the other team's top players.<br>
-    • <em>Fourth line</em> — energy, physicality, and penalty killing. They set the tone, finish checks, and give the top lines a rest.<br><br>
-    <strong>Defensive pairs:</strong> The top pair handles the toughest minutes — shutting down the other team's best forwards. The third pair is usually sheltered in easier situations.<br><br>
-    <em>The best teams have depth — their third and fourth lines can contribute. When your fourth line scores, that's a great sign for your team's culture.</em>`;
-    }
+    const isGoalie = pos === 'G';
 
-    function explainFaceoffs() {
-        return `<strong>Faceoffs</strong> — the most underrated skill in hockey 🔵<br><br>
-    Every play starts with a faceoff — two players face each other at a dot, the referee drops the puck, and they battle for possession. There are nine faceoff dots on the ice: one at center, two in each team's defensive zone, and two in each offensive zone.<br><br>
-    <strong>Why faceoffs matter:</strong> Winning a faceoff in your offensive zone means an immediate scoring chance. Winning one in your defensive zone means clearing the puck safely. Over an 82-game season, faceoff percentage adds up — teams that win the dot consistently control more puck time.<br><br>
-    <strong>Faceoff percentage:</strong> The stat that measures how often a player wins faceoffs. 50% is average. 55%+ is elite. The best faceoff men in the league are worth their weight in gold — especially on the penalty kill.<br><br>
-    <strong>The technique:</strong> It's part strength, part timing, part reading the referee's hand. Some players cheat — trying to move before the puck drops. Get caught and you're kicked out of the dot, and your teammate has to take the draw instead.<br><br>
-    <em>Coaches obsess over faceoffs. It's one of the few situations in hockey where you can directly control who gets the puck.</em>`;
-    }
+    const statsRows = isGoalie
+        ? `<tr><td>GP</td><td>${gp}</td></tr>
+       <tr><td>Wins</td><td>${wins}</td></tr>
+       <tr><td>GAA</td><td>${gaa ?? '—'}</td></tr>
+       <tr><td>SV%</td><td>${svPct ?? '—'}</td></tr>`
+        : `<tr><td>GP</td><td>${gp}</td></tr>
+       <tr><td>Goals</td><td>${goals}</td></tr>
+       <tr><td>Assists</td><td>${assists}</td></tr>
+       <tr><td>Points</td><td>${pts}</td></tr>
+       <tr><td>+/−</td><td>${plusMinus}</td></tr>`;
 
-    // ── Fallback ───────────────────────────────────────────────
-    function fallback(q) {
-        return `That one's a little outside my crease — but I'm always learning. Try asking me about:<br><br>
-    <span class="suggestion" onclick="sendSuggestion(this)">📊 Current standings</span>
-    <span class="suggestion" onclick="sendSuggestion(this)">🎯 Top scorers</span>
-    <span class="suggestion" onclick="sendSuggestion(this)">🥅 Top goalies</span>
-    <span class="suggestion" onclick="sendSuggestion(this)">🏆 Hart Trophy thoughts</span>
-    <span class="suggestion" onclick="sendSuggestion(this)">🎽 Jack Adams Award</span>
-    <span class="suggestion" onclick="sendSuggestion(this)">🎩 What's a hat trick?</span>`;
-    }
+    return `<strong>#${jersey} ${name}</strong> — ${pos} | ${team}<br>
+<table style="width:100%;border-collapse:collapse;font-size:0.85em;margin:6px 0;">
+  <tr><td><strong>Born</strong></td><td>${birthDate} ${birthCity ? '· ' + birthCity : ''} ${nationality ? '· ' + nationality : ''}</td></tr>
+  <tr><td><strong>Size</strong></td><td>${heightCm ? heightCm + ' cm' : '—'} / ${weightLbs ? weightLbs + ' lbs' : '—'}</td></tr>
+</table>
+<strong>Current Season Stats:</strong>
+<table style="width:100%;border-collapse:collapse;font-size:0.85em;margin:6px 0;">
+  ${statsRows}
+</table>
+${breakdown('Scout\'s Take', [
+        `${name} is a ${pos} for the ${team}. ${isGoalie ? 'Goalies win championships — watch his save percentage and GAA as the season progresses.' : 'Track his points-per-game to see if he\'s playing at an elite level.'}`,
+        'Want to compare him to another player? Just ask — e.g. "Matthews vs McDavid".',
+        'Ask me about his team\'s playoff outlook or Cup chances!'
+    ])}`;
+}
+
+// ============================================================
+// 31. fallback()
+// ============================================================
+
+function fallback(q) {
+    const suggestions = [
+        'NHL standings',
+        'Scores today',
+        'Top scorers',
+        'Best goalies',
+        'Cup prediction',
+        'Hart Trophy pick',
+        'Norris Trophy pick',
+        'Calder Trophy pick',
+        'Connor McDavid stats',
+        'Matthews vs McDavid',
+        'MacKinnon vs McDavid',
+        'Crosby vs McDavid',
+        'Ovechkin vs Gretzky',
+        'Best player in the NHL',
+        'Explain icing',
+        'Explain offside',
+        'Explain the salary cap',
+        'How do playoffs work',
+        'What is a hat trick',
+        'Hockey lingo',
+        'Leafs playoff outlook',
+        'Oilers season outlook',
+        'Avalanche Cup chances',
+    ];
+
+    const picks = suggestions.sort(() => Math.random() - 0.5).slice(0, 6);
+    const chips = picks.map(s => `<span class="suggestion" onclick="sendSuggestion(this)">${s}</span>`).join(' ');
+
+    return `Not sure I caught that one — might've hit the post. Here are some things I can help with:<br><br>${chips}<br><br>Or just ask me anything about hockey — standings, scores, players, rules, awards, trades, or hot takes. I'm all ears.`;
+}
