@@ -250,12 +250,63 @@ function tradeOpinion(q) {
 }
 
 function generalOpinion(q) {
+    // Player comparisons
+    if ((q.includes('mckinnon') || q.includes('mackinnon')) && q.includes('mcdavid')) return playerComparison('mackinnon_mcdavid');
+    if (q.includes('matthews') && q.includes('mcdavid')) return playerComparison('matthews_mcdavid');
+    if (q.includes('crosby') && q.includes('mcdavid')) return playerComparison('crosby_mcdavid');
+    if (q.includes('ovechkin') && q.includes('gretzky')) return playerComparison('ovechkin_gretzky');
+    if (q.includes('best player') || q.includes('best in the world') || q.includes('best in the nhl')) return playerComparison('best_player');
+    if (q.includes('best team') || q.includes('cup favourite') || q.includes('cup favorite') || q.includes('win the cup') || q.includes('stanley cup')) return teamOpinion();
+    if (q.includes('overrated')) return `Overrated is a strong word in hockey — but if we're being honest, the most "overrated" players are usually guys who get massive contracts based on one great season and then settle into being solid but not elite. The NHL is littered with $8M cap hits that don't quite deliver. The truly elite players — McDavid, MacKinnon, Matthews — are actually <em>underrated</em> because no contract can capture what they bring on a nightly basis.`;
+    if (q.includes('underrated')) return `Underrated players are the backbone of every championship team. The guys who kill penalties, block shots, win faceoffs, and never show up on the highlight reel — those are the players coaches lose sleep over when they leave in free agency. Every Cup winner has three or four of those guys in the lineup.`;
+
     const responses = [
-        `That's a great hockey question. Here's the honest take: the NHL is in a fascinating place right now. The talent level across the league is as deep as it's ever been — there are legitimate superstars on almost every roster, and the gap between the best and worst teams is smaller than people think.<br><br>The teams that win consistently aren't always the ones with the most talent — they're the ones with the best structure, the best goaltending on the right nights, and a coach who gets the most out of his group. That's what makes it compelling.`,
-        `Good question. Hockey opinions are the best kind of debate because everyone has a take and nobody's completely wrong. The beauty of the sport is that on any given night, the "worse" team can win — goaltending, special teams, and momentum can flip a series in one period.<br><br>Ask me about a specific team, player, or award and I'll give you a proper breakdown.`,
-        `Now we're getting into the good stuff. Hockey debates are what make the sport special — from award races to trade deadline moves to playoff predictions, there's always something to talk about.<br><br>Try asking me about a specific award (Hart, Norris, Jack Adams, Calder), a player's stats, or tonight's games and I'll dig in properly.`
+        `That's a great hockey take. Drop a more specific question — player comparison, award race, team outlook — and I'll give you a proper Rinkside breakdown on it. 🏒`,
+        `Good hockey debate. Get more specific and I'll dig in — player vs. player, award predictions, Cup contenders. That's where it gets fun.`
     ];
     return responses[Math.floor(Math.random() * responses.length)];
+}
+
+function playerComparison(matchup) {
+    const comparisons = {
+        mackinnon_mcdavid: `<strong>MacKinnon vs. McDavid</strong> — the best debate in hockey right now 🏒<br><br>
+        Here's the honest take: <strong>McDavid is the best player on the planet</strong>, and it's not particularly close on pure skill. The speed, the hands, the vision — there's never been anyone who does what he does at even strength. He makes the impossible look routine.<br><br>
+        But <strong>MacKinnon's case is legitimate</strong>. He's the most complete player in the game — elite in all three zones, plays in every situation, competes harder than almost anyone, and has carried Colorado to a Stanley Cup. He's the guy you'd want if you needed one player to win you a series.<br><br>
+        The difference? McDavid makes you gasp. MacKinnon makes you win. Depending on what you value, you can make a case for either — and that's what makes this debate so good.<br><br>
+        <em>Friedman take: McDavid is the best player. MacKinnon is the best hockey player. There's a difference.</em>`,
+
+        matthews_mcdavid: `<strong>Matthews vs. McDavid</strong> — Toronto vs. Edmonton, the modern rivalry 🏒<br><br>
+        <strong>McDavid</strong> is the better all-around player — the skating, the playmaking, the ability to take over a game at will. He's the standard everyone else is measured against.<br><br>
+        But <strong>Matthews</strong> might be the purest goal scorer the NHL has seen in a generation. His shot release is the fastest in the league, his positioning is elite, and he's a legitimate 60-goal threat every season. If you need one goal in one game, Matthews might actually be your guy.<br><br>
+        McDavid wins the overall debate. But Matthews has carved out his own lane — and in a league that values goal scoring, that lane is worth a lot.<br><br>
+        <em>The real question is: would you rather have McDavid's ceiling or Matthews' consistency? Both answers are defensible.</em>`,
+
+        crosby_mcdavid: `<strong>Crosby vs. McDavid</strong> — the generational debate 🏒<br><br>
+        This one comes down to era and what you value. <strong>Crosby</strong> is the most complete player of his generation — three Stanley Cups, two Olympic golds, every major individual award. He changed how the game is played and did it while being the most physically targeted player in the league for 15 years.<br><br>
+        <strong>McDavid</strong> is doing things with the puck that Crosby never did. The pure skating ability, the top-end speed — it's a different kind of dominance.<br><br>
+        Peak for peak? McDavid might have the edge on pure skill. But Crosby's résumé — especially the playoff success — is the standard. Until McDavid wins a Cup, Crosby holds the edge in the all-time conversation.<br><br>
+        <em>Both answers are right. That's what makes it the best debate in hockey.</em>`,
+
+        ovechkin_gretzky: `<strong>Ovechkin vs. Gretzky</strong> — the goal scoring debate for the ages 🏒<br><br>
+        Ovechkin broke Gretzky's all-time goals record — a number that was supposed to be untouchable. That alone is one of the most remarkable achievements in sports history.<br><br>
+        But context matters: <strong>Gretzky's assist totals alone</strong> would make him the all-time points leader. He had 1,963 assists. Ovechkin has fewer total points than Gretzky has assists. The Great One played in a higher-scoring era, but the gap in playmaking is staggering.<br><br>
+        Ovechkin is the greatest goal scorer who ever lived. Gretzky is the greatest hockey player who ever lived. Those aren't the same thing — and both statements are true.`,
+
+        best_player: `<strong>Best player in the NHL right now?</strong> 🏒<br><br>
+        <strong>Connor McDavid</strong>. It's not a debate — it's a fact. He's won the Hart Trophy multiple times, leads the league in points in most seasons, and does things with the puck that make professional hockey players stop and stare.<br><br>
+        The conversation for second place is genuinely interesting: <strong>Nathan MacKinnon</strong> is the most complete player, <strong>Auston Matthews</strong> is the best pure goal scorer, and <strong>Leon Draisaitl</strong> — McDavid's linemate — would be the best player on 29 other teams.<br><br>
+        But McDavid is in a tier by himself. The only real debate is whether he's the best player of his generation or the best player ever. That conversation is already happening.`
+    };
+
+    return comparisons[matchup] || generalOpinion('');
+}
+
+function teamOpinion() {
+    return `<strong>Stanley Cup contenders</strong> — let's break it down 🏆<br><br>
+    Every year the Cup conversation starts the same way: follow the goaltending. You can have the best roster in the league, but if your goalie goes cold in April, you're going home early. That's the NHL.<br><br>
+    The teams that consistently contend share a few things: <strong>elite centre depth</strong> (the best teams have two legitimate top-six centres), <strong>a reliable starter in net</strong>, and <strong>a power play that converts</strong>. Special teams win playoff series — it's not glamorous, but it's true.<br><br>
+    The dark horse every year is the team that gets hot at the right time. Playoff hockey rewards momentum, and a team that's playing its best hockey in March and April is dangerous regardless of where they finished in the standings.<br><br>
+    Ask me about a specific team and I'll give you a proper breakdown on their Cup chances.`;
 }
 
 // ── Player Search ──────────────────────────────────────────
