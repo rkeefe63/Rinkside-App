@@ -39,7 +39,7 @@ function addMessage(text, sender = 'bot') {
     const chat = document.getElementById('chat-messages');
     const msg = document.createElement('div');
     msg.className = `message ${sender}`;
-    msg.innerHTML = text;
+    msg.innerHTML = `<div class="avatar">${sender === 'bot' ? '🏒' : '👤'}</div><div class="bubble">${text}</div>`;
     chat.appendChild(msg);
     chat.scrollTop = chat.scrollHeight;
 }
@@ -47,9 +47,9 @@ function addMessage(text, sender = 'bot') {
 function showTyping() {
     const chat = document.getElementById('chat-messages');
     const typing = document.createElement('div');
-    typing.className = 'message bot typing-indicator';
+    typing.className = 'message bot typing';
     typing.id = 'typing';
-    typing.innerHTML = '<span></span><span></span><span></span>';
+    typing.innerHTML = `<div class="avatar">🏒</div><div class="bubble"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>`;
     chat.appendChild(typing);
     chat.scrollTop = chat.scrollHeight;
 }
@@ -60,16 +60,16 @@ function hideTyping() {
 }
 
 function sendSuggestion(el) {
-    const text = el.textContent.trim();
-    const input = document.getElementById('user-input');
+    const text = el.textContent.replace(/^[^\w]+/, '').trim();
+    const input = document.getElementById('chat-input');
     if (input) {
         input.value = text;
-        handleSubmit();
+        document.getElementById('chat-form').dispatchEvent(new Event('submit'));
     }
 }
 
 async function handleSubmit() {
-    const input = document.getElementById('user-input');
+    const input = document.getElementById('chat-input');
     const q = input.value.trim();
     if (!q) return;
     input.value = '';
@@ -81,7 +81,7 @@ async function handleSubmit() {
         addMessage(reply, 'bot');
     } catch (e) {
         hideTyping();
-        addMessage(`Whoa, hit the glass on that one — something went wrong. Try again? <em>(${e.message})</em>`, 'bot');
+        addMessage(`Oof, couldn't connect to the NHL API right now. Try again in a sec — even Bettman has bad days.`, 'bot');
     }
 }
 
