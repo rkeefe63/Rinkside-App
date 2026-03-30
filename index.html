@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Rinkside</title>
+    <link rel="stylesheet" href="style.css" />
+</head>
+
+<body>
+
+    <header>
+        <div class="header-inner">
+            <div class="logo">🏒 Rinkside</div>
+            <p class="tagline">Your rinkside analyst. Ask anything hockey.</p>
+        </div>
+    </header>
+
+    <main>
+        <div class="chat-container">
+            <div class="chat-messages" id="chat-messages">
+                <div class="message bot">
+                    <div class="avatar">🏒</div>
+                    <div class="bubble">
+                        Hey, welcome to Rinkside! I'm your go-to for everything hockey — standings, scores, player
+                        stats, you name it. Ask me like you'd ask a buddy at the rink. Try something like:<br><br>
+                        <span class="suggestion" onclick="sendSuggestion(this)">📊 Who's leading the NHL in
+                            points?</span>
+                        <span class="suggestion" onclick="sendSuggestion(this)">🏆 Show me the current standings</span>
+                        <span class="suggestion" onclick="sendSuggestion(this)">🎯 Any games today?</span>
+                        <span class="suggestion" onclick="sendSuggestion(this)">🥅 Top goalies this season</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="chat-input-area">
+                <div class="suggestions-row" id="suggestions-row">
+                    <button class="chip" onclick="sendSuggestion(this)">Standings</button>
+                    <button class="chip" onclick="sendSuggestion(this)">Games today</button>
+                    <button class="chip" onclick="sendSuggestion(this)">Top scorers</button>
+                    <button class="chip" onclick="sendSuggestion(this)">Top goalies</button>
+                    <button class="chip" onclick="sendSuggestion(this)">Explain icing</button>
+                    <button class="chip" onclick="sendSuggestion(this)">Explain offside</button>
+                </div>
+                <form id="chat-form">
+                    <input type="text" id="chat-input" placeholder="Ask anything hockey..." autocomplete="off" />
+                    <button type="submit" aria-label="Send">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                            <line x1="22" y1="2" x2="11" y2="13" />
+                            <polygon points="22 2 15 22 11 13 2 9 22 2" />
+                        </svg>
+                    </button>
+                </form>
+            </div>
+        </div>
+    </main>
+
+    <script src="app.js"></script>
+</body>
+
+</html>
