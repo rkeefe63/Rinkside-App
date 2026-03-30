@@ -57,18 +57,19 @@ form.addEventListener('submit', async e => {
 
 // ── Intent Router ──────────────────────────────────────────
 async function getResponse(q) {
-    if (match(q, ['standing', 'division', 'conference', 'table', 'league'])) return await getStandings();
-    if (match(q, ['today', 'tonight', 'game', 'schedule', 'score', 'playing'])) return await getScores();
-    if (match(q, ['top scorer', 'point leader', 'most point', 'scoring leader', 'art ross'])) return await getTopScorers();
-    if (match(q, ['goalie', 'goaltender', 'save', 'gaa', 'sv%', 'vezina'])) return await getTopGoalies();
+    if (match(q, ['standing', 'division', 'conference', 'table', 'league', 'playoff', 'wild card', 'first place', 'last place', 'best record', 'worst record'])) return await getStandings();
+    if (match(q, ['today', 'tonight', 'game', 'schedule', 'score', 'playing', 'on tonight', 'on today', 'matchup', 'result', 'final score', 'last night'])) return await getScores();
+    if (match(q, ['top scorer', 'point leader', 'most point', 'scoring leader', 'art ross', 'leading in point', 'leading the nhl', 'most goal', 'goal leader', 'assist leader', 'most assist', 'best scorer', 'leading scorer', 'point', 'goals', 'assists'])) return await getTopScorers();
+    if (match(q, ['goalie', 'goaltender', 'save', 'gaa', 'sv%', 'vezina', 'best goalie', 'top goalie', 'between the pipe', 'netminder'])) return await getTopGoalies();
     if (match(q, ['icing'])) return explainIcing();
     if (match(q, ['offside', 'off side'])) return explainOffside();
-    if (match(q, ['penalty', 'penalties', 'power play', 'pp'])) return explainPenalties();
-    if (match(q, ['hat trick'])) return explainHatTrick();
+    if (match(q, ['penalty', 'penalties', 'power play', 'pp', 'shorthanded', 'penalty kill', 'hooking', 'tripping', 'slashing'])) return explainPenalties();
+    if (match(q, ['hat trick', 'hat-trick'])) return explainHatTrick();
     if (match(q, ['bar down', 'top cheese', 'celly', 'chirp', 'dangle', 'snipe', 'biscuit', 'barn', 'twig', 'wheel'])) return explainLingo(q);
-    if (match(q, ['who is', 'tell me about', 'stats for', 'how is', 'player'])) return await searchPlayer(q);
+    if (match(q, ['who is', 'tell me about', 'stats for', 'how is', 'how has', 'how many', 'player', 'mcdavid', 'matthews', 'draisaitl', 'crosby', 'ovechkin', 'makar', 'hedman', 'mackinnon', 'rantanen', 'pastrnak'])) return await searchPlayer(q);
     return fallback(q);
 }
+
 
 function match(q, keywords) {
     return keywords.some(k => q.includes(k));
