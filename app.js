@@ -1,11 +1,11 @@
 // ── NHL API ────────────────────────────────────────────────
 const NHL = 'https://api-web.nhle.com/v1';
-const PROXY = 'https://corsproxy.io/?';
 
 async function nhlFetch(url) {
-    const res = await fetch(PROXY + encodeURIComponent(url));
-    if (!res.ok) throw new Error(`NHL API error: ${res.status}`);
-    return res.json();
+    const res = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(url)}`);
+    if (!res.ok) throw new Error(`Proxy error: ${res.status}`);
+    const wrapper = await res.json();
+    return JSON.parse(wrapper.contents);
 }
 
 // ── Chat UI ────────────────────────────────────────────────
