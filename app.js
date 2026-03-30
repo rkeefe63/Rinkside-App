@@ -1,10 +1,10 @@
 // ── NHL API ────────────────────────────────────────────────
 const NHL = 'https://api-web.nhle.com/v1';
-const NHL2 = 'https://api.nhle.com/stats/rest/en';
+const PROXY = 'https://corsproxy.io/?';
 
 async function nhlFetch(url) {
-    const res = await fetch(url);
-    if (!res.ok) throw new Error('NHL API error');
+    const res = await fetch(PROXY + encodeURIComponent(url));
+    if (!res.ok) throw new Error(`NHL API error: ${res.status}`);
     return res.json();
 }
 
