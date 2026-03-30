@@ -2,10 +2,25 @@
 const NHL = 'https://api-web.nhle.com/v1';
 
 async function nhlFetch(url) {
-    const res = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(url)}`);
-    if (!res.ok) throw new Error(`Proxy error: ${res.status}`);
-    const wrapper = await res.json();
-    return JSON.parse(wrapper.contents);
+    // Try allorigins first, fall back to direct fetch
+    const proxies = [
+        u => `https://api.allorigins.win/get?url=${encodeURIComponent(u)}`,
+        u => `https://corsproxy.io/?${encodeURIComponent(u)}`,
+    ];
+    for (const proxy of proxies) {
+        try {
+            const res = await fetch(proxy(url));
+            if (!res.ok) continue;
+            const data = await res.json();
+            // allorigins wraps in {contents: "..."}
+            if (data.contents) return JSON.parse(data.contents);
+            return data;
+        } catch (e) { continue; }
+    }
+    // Last resort: direct fetch (works if NHL ever enables CORS)
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`NHL API error: ${res.status}`);
+    return res.json();
 }
 
 // ── Chat UI ────────────────────────────────────────────────
@@ -115,10 +130,12 @@ async function getStandings() {
 
 // ── Scores ─────────────────────────────────────────────────
 async function getScores() {
-    const data = await nhlFetch(`${NHL}/score/now`);
-    const games = data.games;
+    const dateStr = new Date().toISOString().split('T')[0];
+    const data = await nhlFetch(`${NHL}/schedule/${dateStr}`);
+    const gameDay = data.gameWeek?.[0];
+    const games = gameDay?.games || [];
 
-    if (!games || games.length === 0) {
+    if (!games.length) {
         return `No games on the schedule today — even the NHL takes a breather sometimes. Check back tomorrow, the boys'll be back on the ice soon enough. 🏒`;
     }
 
