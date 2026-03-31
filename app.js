@@ -52,6 +52,9 @@ function sendSuggestion(el) {
     formEl.dispatchEvent(new Event('submit'));
 }
 
+// ── Conversation Context ───────────────────────────────────
+let lastTopic = null; // tracks what was last discussed
+
 formEl.addEventListener('submit', async e => {
     e.preventDefault();
     const text = inputEl.value.trim();
@@ -80,34 +83,82 @@ ${notes.map(n => `<p style="font-size:0.88rem;color:var(--text);line-height:1.7;
 }
 
 // ── Intent Router ──────────────────────────────────────────
+// ── Follow-up Handler ──────────────────────────────────────
+function handleFollowUp(q) {
+    const isFollowUp = match(q, ['but', 'also', 'what about', 'agree', 'disagree', 'wouldn\'t you', 'don\'t you', 'do you think', 'what do you think', 'really', 'though', 'however', 'then', 'so', 'yeah but', 'true but', 'fair but', 'right but', 'sure but', 'and what', 'how about', 'what if', 'why', 'explain', 'elaborate', 'more on', 'tell me more', 'go on', 'continue', 'expand']);
+
+    if (!isFollowUp || !lastTopic) return null;
+
+    // Context-aware follow-up responses
+    const followUps = {
+        cup: {
+            depth: `100% — depth is arguably the most underrated factor in a Cup run. When your fourth line can contribute and your third pair isn't a liability, that's when you become dangerous. The teams that win in June aren't just the ones with the best top line — they're the ones where the 10th forward and the 5th defenceman can hold their own in a Game 7. Injuries happen in the playoffs, and the teams with real depth absorb them without falling apart.`,
+            goaltending: `Goaltending and depth are actually two sides of the same coin. A hot goalie can carry you through a round, but depth is what gets you to the final. You need both — a goalie who can steal games AND a roster that doesn't fall apart when your top-six takes a hit. The dynasties of the past had both. That's what makes them so hard to replicate.`,
+            default: `That's a fair point to push back on. The Cup formula is never one thing — it's goaltending, depth, special teams, health, and a little bit of luck all coming together at the right time. The teams that win usually check most of those boxes, not just one. What specifically are you thinking about?`
+        },
+        scorers: {
+            default: `Good follow-up. The scoring race is fascinating because it's not just about raw talent — it's about linemates, power play time, and opportunity. A guy on a bad team might be just as skilled as the points leader but never gets the same chances. Context matters a lot when you're reading the scoring race.`
+        },
+        goalies: {
+            default: `Exactly right. Goaltending is the most volatile position in hockey — a guy can be elite one season and average the next. The SV% leaders right now are playing great, but the real test is whether they can sustain it through April and May when the game tightens up and every shot is a quality chance.`
+        },
+        standings: {
+            default: `The standings tell you where teams are, but not always why. A team can be sitting in a wild card spot and be playing their best hockey of the year — or a division leader can be coasting on a hot start. Points are the currency, but the underlying play matters just as much heading into the stretch run.`
+        },
+        opinion: {
+            default: `That's a solid take. Hockey debates are great because there's rarely one right answer — it depends on what you value. Skill ceiling vs. consistency, individual brilliance vs. team success, regular season dominance vs. playoff performance. Where do you land on it?`
+        },
+        default: {
+            default: `That's a fair point. Hockey is one of those sports where you can make a compelling argument for almost any position if you frame it right. The game has so many variables — goaltending, special teams, depth, coaching, health — that the "right" answer usually depends on which lens you're looking through. What's your take?`
+        }
+    };
+
+    const topicKey = lastTopic?.startsWith('team_') ? 'cup' : lastTopic;
+    const topicResponses = followUps[topicKey] || followUps.default;
+
+    // Match specific follow-up themes
+    if (match(q, ['depth', 'roster', 'fourth line', 'third line', 'bottom six', 'bottom pair', 'role player', 'grinder'])) {
+        return topicResponses.depth || topicResponses.default;
+    }
+    if (match(q, ['goaltending', 'goalie', 'netminder', 'between the pipes', 'crease'])) {
+        return topicResponses.goaltending || topicResponses.default;
+    }
+
+    return topicResponses.default;
+}
+
 async function getResponse(q) {
-    if (match(q, ['standing', 'division', 'conference', 'first place', 'last place', 'best record', 'worst record', 'league table'])) return await getStandings();
-    if (match(q, ['today', 'tonight', 'any games', 'games today', 'schedule', 'score', 'result', 'last night', 'matchup'])) return await getScores();
-    if (match(q, ['top scorer', 'point leader', 'most point', 'scoring leader', 'art ross', 'leading the nhl', 'most goal', 'goal leader', 'assist leader', 'best scorer', 'leading scorer'])) return await getTopScorers();
-    if (match(q, ['goalie', 'goaltender', 'save', 'gaa', 'sv%', 'vezina', 'best goalie', 'top goalie', 'netminder', 'between the pipe'])) return await getTopGoalies();
-    if (match(q, ['jack adams', 'coach of the year', 'best coach'])) return awardsOpinion('jack_adams', q);
-    if (match(q, ['hart trophy', 'hart memorial', 'mvp', 'most valuable'])) return awardsOpinion('hart', q);
-    if (match(q, ['norris', 'best defenceman', 'best defenseman', 'top defenseman', 'top defenceman'])) return awardsOpinion('norris', q);
-    if (match(q, ['calder', 'rookie of the year', 'best rookie', 'top rookie'])) return awardsOpinion('calder', q);
-    if (match(q, ['conn smythe', 'playoff mvp'])) return awardsOpinion('conn_smythe', q);
-    if (match(q, ['trade', 'traded', 'deadline', 'rumor', 'rumour', 'signing', 'signed', 'free agent'])) return tradeOpinion(q);
-    if (match(q, ['stanley cup', 'win the cup', 'cup this year', 'cup prediction', 'cup contender', 'cup favourite', 'cup favorite', 'winning the cup', 'who wins', 'best team'])) return await getCupPrediction();
-    if (match(q, ['salary cap', 'cap space', 'cap hit', 'cap ceiling', 'collective bargaining'])) return explainSalaryCap();
-    if (match(q, ['draft', 'nhl draft', 'lottery', 'first overall', 'prospect'])) return explainDraft();
-    if (match(q, ['playoff format', 'how do playoffs work', 'playoff seeding', 'how does the playoff', 'playoff structure'])) return explainPlayoffs();
-    if (match(q, ['shootout', 'shoot out'])) return explainShootout();
-    if (match(q, ['fight', 'fighting', 'enforcer', 'dropping the gloves'])) return explainFighting();
-    if (match(q, ['line change', 'fourth line', 'first line', 'line combination', 'forward line', 'defensive pair'])) return explainLines();
-    if (match(q, ['faceoff', 'face off', 'face-off'])) return explainFaceoffs();
-    if (match(q, ['icing'])) return explainIcing();
-    if (match(q, ['offside', 'off side'])) return explainOffside();
-    if (match(q, ['penalty', 'penalties', 'power play', 'shorthanded', 'penalty kill', 'hooking', 'tripping', 'slashing'])) return explainPenalties();
-    if (match(q, ['hat trick', 'hat-trick'])) return explainHatTrick();
-    if (match(q, ['bar down', 'top cheese', 'celly', 'chirp', 'dangle', 'snipe', 'biscuit', 'barn', 'twig', 'wheel', 'apple', 'beauty', 'flow', 'gongshow', 'barn burner', 'standing on his head', 'between the pipes', 'backstop', 'blueliner', 'grinder', 'plug', 'pigeon', 'tape to tape', 'breakaway', 'odd-man', 'cycle', 'forecheck', 'backcheck', 'trap', 'top shelf', 'five hole', 'five-hole', 'glove side', 'blocker side', 'wraparound', 'saucer pass', 'one timer', 'one-timer', 'clapper', 'slap shot', 'wrist shot', 'backhand', 'deke', 'spin-o-rama', 'spinorama', 'lacrosse', 'michigan', 'coast to coast', 'end to end'])) return explainLingo(q);
-    if (match(q, ['thought', 'think', 'opinion', 'feel about', 'better than', 'vs', 'versus', 'overrated', 'underrated', 'favourite', 'favorite', 'who should', 'who will', 'who would', 'greatest', 'goat'])) return generalOpinion(q);
+    // Check for follow-up/conversational questions first
+    const followUp = handleFollowUp(q);
+    if (followUp) return followUp;
+
+    if (match(q, ['standing', 'division', 'conference', 'first place', 'last place', 'best record', 'worst record', 'league table'])) { lastTopic = 'standings'; return await getStandings(); }
+    if (match(q, ['today', 'tonight', 'any games', 'games today', 'schedule', 'score', 'result', 'last night', 'matchup'])) { lastTopic = 'scores'; return await getScores(); }
+    if (match(q, ['top scorer', 'point leader', 'most point', 'scoring leader', 'art ross', 'leading the nhl', 'most goal', 'goal leader', 'assist leader', 'best scorer', 'leading scorer'])) { lastTopic = 'scorers'; return await getTopScorers(); }
+    if (match(q, ['goalie', 'goaltender', 'save', 'gaa', 'sv%', 'vezina', 'best goalie', 'top goalie', 'netminder', 'between the pipe'])) { lastTopic = 'goalies'; return await getTopGoalies(); }
+    if (match(q, ['jack adams', 'coach of the year', 'best coach'])) { lastTopic = 'jack_adams'; return awardsOpinion('jack_adams', q); }
+    if (match(q, ['hart trophy', 'hart memorial', 'mvp', 'most valuable'])) { lastTopic = 'hart'; return awardsOpinion('hart', q); }
+    if (match(q, ['norris', 'best defenceman', 'best defenseman', 'top defenseman', 'top defenceman'])) { lastTopic = 'norris'; return awardsOpinion('norris', q); }
+    if (match(q, ['calder', 'rookie of the year', 'best rookie', 'top rookie'])) { lastTopic = 'calder'; return awardsOpinion('calder', q); }
+    if (match(q, ['conn smythe', 'playoff mvp'])) { lastTopic = 'conn_smythe'; return awardsOpinion('conn_smythe', q); }
+    if (match(q, ['trade', 'traded', 'deadline', 'rumor', 'rumour', 'signing', 'signed', 'free agent'])) { lastTopic = 'trades'; return tradeOpinion(q); }
+    if (match(q, ['stanley cup', 'win the cup', 'cup this year', 'cup prediction', 'cup contender', 'cup favourite', 'cup favorite', 'winning the cup', 'who wins', 'best team'])) { lastTopic = 'cup'; return await getCupPrediction(); }
+    if (match(q, ['salary cap', 'cap space', 'cap hit', 'cap ceiling', 'collective bargaining'])) { lastTopic = 'cap'; return explainSalaryCap(); }
+    if (match(q, ['draft', 'nhl draft', 'lottery', 'first overall', 'prospect'])) { lastTopic = 'draft'; return explainDraft(); }
+    if (match(q, ['playoff format', 'how do playoffs work', 'playoff seeding', 'how does the playoff', 'playoff structure'])) { lastTopic = 'playoffs'; return explainPlayoffs(); }
+    if (match(q, ['shootout', 'shoot out'])) { lastTopic = 'shootout'; return explainShootout(); }
+    if (match(q, ['fight', 'fighting', 'enforcer', 'dropping the gloves'])) { lastTopic = 'fighting'; return explainFighting(); }
+    if (match(q, ['line change', 'fourth line', 'first line', 'line combination', 'forward line', 'defensive pair'])) { lastTopic = 'lines'; return explainLines(); }
+    if (match(q, ['faceoff', 'face off', 'face-off'])) { lastTopic = 'faceoffs'; return explainFaceoffs(); }
+    if (match(q, ['icing'])) { lastTopic = 'icing'; return explainIcing(); }
+    if (match(q, ['offside', 'off side'])) { lastTopic = 'offside'; return explainOffside(); }
+    if (match(q, ['penalty', 'penalties', 'power play', 'shorthanded', 'penalty kill', 'hooking', 'tripping', 'slashing'])) { lastTopic = 'penalties'; return explainPenalties(); }
+    if (match(q, ['hat trick', 'hat-trick'])) { lastTopic = 'hattrick'; return explainHatTrick(); }
+    if (match(q, ['bar down', 'top cheese', 'celly', 'chirp', 'dangle', 'snipe', 'biscuit', 'barn', 'twig', 'wheel', 'apple', 'beauty', 'flow', 'gongshow', 'barn burner', 'standing on his head', 'between the pipes', 'backstop', 'blueliner', 'grinder', 'plug', 'pigeon', 'tape to tape', 'breakaway', 'odd-man', 'cycle', 'forecheck', 'backcheck', 'trap', 'top shelf', 'five hole', 'five-hole', 'glove side', 'blocker side', 'wraparound', 'saucer pass', 'one timer', 'one-timer', 'clapper', 'slap shot', 'wrist shot', 'backhand', 'deke', 'spin-o-rama', 'spinorama', 'lacrosse', 'michigan', 'coast to coast', 'end to end'])) { lastTopic = 'lingo'; return explainLingo(q); }
+    if (match(q, ['thought', 'think', 'opinion', 'feel about', 'better than', 'vs', 'versus', 'overrated', 'underrated', 'favourite', 'favorite', 'who should', 'who will', 'who would', 'greatest', 'goat'])) { lastTopic = 'opinion'; return generalOpinion(q); }
     const teamMatch = detectTeam(q);
-    if (teamMatch && match(q, ['playoff', 'make it', 'making it', 'will they', 'chance', 'contend', 'bubble', 'clinch', 'season', 'outlook', 'how are', 'how is', 'doing this', 'think about', 'thoughts on', 'doing', 'look', 'good', 'bad', 'win', 'lose', 'cup', 'rebuild', 'tank', 'trade', 'future', 'this year', 'year', 'gonna', 'going to', 'think they', 'any good', 'any chance'])) return await getTeamOutlook(teamMatch);
-    if (match(q, ['who is', 'tell me about', 'stats for', 'how is', 'how has', 'player', 'mcdavid', 'matthews', 'draisaitl', 'crosby', 'ovechkin', 'makar', 'hedman', 'mackinnon', 'rantanen', 'pastrnak'])) return await searchPlayer(q);
+    if (teamMatch && match(q, ['playoff', 'make it', 'making it', 'will they', 'chance', 'contend', 'bubble', 'clinch', 'season', 'outlook', 'how are', 'how is', 'doing this', 'think about', 'thoughts on', 'doing', 'look', 'good', 'bad', 'win', 'lose', 'cup', 'rebuild', 'tank', 'trade', 'future', 'this year', 'year', 'gonna', 'going to', 'think they', 'any good', 'any chance'])) { lastTopic = 'team_' + teamMatch; return await getTeamOutlook(teamMatch); }
+    if (match(q, ['who is', 'tell me about', 'stats for', 'how is', 'how has', 'player', 'mcdavid', 'matthews', 'draisaitl', 'crosby', 'ovechkin', 'makar', 'hedman', 'mackinnon', 'rantanen', 'pastrnak'])) { lastTopic = 'player'; return await searchPlayer(q); }
     return fallback();
 }
 
@@ -533,25 +584,61 @@ function fallback() {
 async function loadScoreboard() {
     const inner = document.getElementById('scoreboard-inner');
     try {
-        const dateStr = new Date().toISOString().split('T')[0];
-        const data = await nhlFetch(`${NHL}/schedule/${dateStr}`);
-        const games = data.gameWeek?.[0]?.games || [];
-        if (!games.length) {
-            inner.innerHTML = `<span class="scoreboard-loading">No games scheduled today</span>`;
+        // Fetch 7 days back and 14 days forward
+        const allGames = [];
+        const today = new Date();
+        const dates = [];
+        for (let i = -7; i <= 14; i++) {
+            const d = new Date(today);
+            d.setDate(today.getDate() + i);
+            dates.push(d.toISOString().split('T')[0]);
+        }
+
+        // Fetch in parallel batches
+        const results = await Promise.allSettled(
+            dates.map(date => nhlFetch(`${NHL}/schedule/${date}`))
+        );
+
+        results.forEach((result, i) => {
+            if (result.status === 'fulfilled') {
+                const games = result.value.gameWeek?.[0]?.games || [];
+                games.forEach(g => allGames.push({ ...g, _date: dates[i] }));
+            }
+        });
+
+        if (!allGames.length) {
+            inner.innerHTML = `<span class="scoreboard-loading">No games found</span>`;
             return;
         }
-        inner.innerHTML = games.map(g => {
+
+        const todayStr = today.toISOString().split('T')[0];
+
+        inner.innerHTML = allGames.map(g => {
             const away = g.awayTeam?.abbrev || '?';
             const home = g.homeTeam?.abbrev || '?';
             const isLive = g.gameState === 'LIVE' || g.gameState === 'CRIT';
             const isFinal = g.gameState === 'FINAL' || g.gameState === 'OFF';
+            const isFuture = !isLive && !isFinal;
             const scoreStr = (isLive || isFinal) ? `${g.awayTeam?.score ?? 0}–${g.homeTeam?.score ?? 0}` : 'vs';
-            const status = isFinal ? 'Final' : isLive ? `P${g.periodDescriptor?.number} ${g.clock?.timeRemaining ?? ''}` : g.startTimeUTC ? new Date(g.startTimeUTC).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : 'TBD';
-            return `<div class="scoreboard-game ${isLive ? 'live' : ''}">
+            const isToday = g._date === todayStr;
+            const dateLabel = isToday ? 'Today' : new Date(g._date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+            const status = isFinal ? 'Final' : isLive
+                ? `🔴 P${g.periodDescriptor?.number ?? ''} ${g.clock?.timeRemaining ?? ''}`
+                : g.startTimeUTC ? new Date(g.startTimeUTC).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : 'TBD';
+
+            return `<div class="scoreboard-game ${isLive ? 'live' : ''} ${isFuture ? 'upcoming' : ''}">
+                <div class="scoreboard-date">${dateLabel}</div>
                 <span class="teams">${away} <span class="score">${scoreStr}</span> ${home}</span>
                 <span class="status">${status}</span>
             </div>`;
         }).join('');
+
+        // Scroll to today's games
+        const todayGame = inner.querySelector('.scoreboard-game:not(.upcoming)');
+        if (todayGame) {
+            setTimeout(() => todayGame.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' }), 300);
+        }
+
     } catch (e) {
         inner.innerHTML = `<span class="scoreboard-loading">Scoreboard unavailable</span>`;
     }

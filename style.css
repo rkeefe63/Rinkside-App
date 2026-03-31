@@ -46,8 +46,10 @@ header {
     max-width: 1200px;
     margin: 0 auto;
     display: flex;
+    flex-direction: column;
     align-items: center;
-    gap: 1rem;
+    text-align: center;
+    gap: 0.25rem;
 }
 
 .logo {
@@ -85,14 +87,22 @@ header {
 
 .scoreboard-game {
     display: flex;
-    align-items: center;
-    gap: 0.5rem;
+    flex-direction: column;
+    gap: 0.2rem;
     font-size: 0.82rem;
-    padding: 0.3rem 0.75rem;
+    padding: 0.4rem 0.75rem;
     background: var(--bg-input);
     border: 1px solid var(--border);
     border-radius: 8px;
     white-space: nowrap;
+    min-width: 110px;
+}
+
+.scoreboard-date {
+    font-size: 0.68rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
 }
 
 .scoreboard-game .teams {
@@ -115,6 +125,10 @@ header {
 
 .scoreboard-game.live .status {
     color: #ff6b6b;
+}
+
+.scoreboard-game.upcoming {
+    opacity: 0.65;
 }
 
 .scoreboard-loading {
