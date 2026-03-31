@@ -581,66 +581,45 @@ function fallback() {
 }
 
 // ── Scoreboard Strip ───────────────────────────────────────
+let scoreboardOffset = 0; // 0 = today, -1 = yesterday, +1 = tomorrow
+
 async function loadScoreboard() {
     const inner = document.getElementById('scoreboard-inner');
+    const d = new Date();
+    d.setDate(d.getDate() + scoreboardOffset);
+    const dateStr = d.toISOString().split('T')[0];
+    const isToday = scoreboardOffset === 0;
+    const dateLabel = isToday ? 'Today' : d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+
+    // Update nav label
+    document.getElementById('scoreboard-date-label').textContent = dateLabel;
+    inner.innerHTML = `<span class="scoreboard-loading">Loading...</span>`;
+
     try {
-        // Fetch 7 days back and 14 days forward
-        const allGames = [];
-        const today = new Date();
-        const dates = [];
-        for (let i = -7; i <= 14; i++) {
-            const d = new Date(today);
-            d.setDate(today.getDate() + i);
-            dates.push(d.toISOString().split('T')[0]);
-        }
+        const data = await nhlFetch(`${NHL}/schedule/${dateStr}`);
+        const games = data.gameWeek?.[0]?.games || [];
 
-        // Fetch in parallel batches
-        const results = await Promise.allSettled(
-            dates.map(date => nhlFetch(`${NHL}/schedule/${date}`))
-        );
-
-        results.forEach((result, i) => {
-            if (result.status === 'fulfilled') {
-                const games = result.value.gameWeek?.[0]?.games || [];
-                games.forEach(g => allGames.push({ ...g, _date: dates[i] }));
-            }
-        });
-
-        if (!allGames.length) {
-            inner.innerHTML = `<span class="scoreboard-loading">No games found</span>`;
+        if (!games.length) {
+            inner.innerHTML = `<span class="scoreboard-loading">No games scheduled for ${dateLabel}</span>`;
             return;
         }
 
-        const todayStr = today.toISOString().split('T')[0];
-
-        inner.innerHTML = allGames.map(g => {
+        inner.innerHTML = games.map(g => {
             const away = g.awayTeam?.abbrev || '?';
             const home = g.homeTeam?.abbrev || '?';
             const isLive = g.gameState === 'LIVE' || g.gameState === 'CRIT';
             const isFinal = g.gameState === 'FINAL' || g.gameState === 'OFF';
-            const isFuture = !isLive && !isFinal;
             const scoreStr = (isLive || isFinal) ? `${g.awayTeam?.score ?? 0}–${g.homeTeam?.score ?? 0}` : 'vs';
-            const isToday = g._date === todayStr;
-            const dateLabel = isToday ? 'Today' : new Date(g._date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-            const status = isFinal ? 'Final' : isLive
-                ? `🔴 P${g.periodDescriptor?.number ?? ''} ${g.clock?.timeRemaining ?? ''}`
-                : g.startTimeUTC ? new Date(g.startTimeUTC).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : 'TBD';
-
-            return `<div class="scoreboard-game ${isLive ? 'live' : ''} ${isFuture ? 'upcoming' : ''}">
-                <div class="scoreboard-date">${dateLabel}</div>
+            const status = isFinal ? 'Final'
+                : isLive ? `🔴 P${g.periodDescriptor?.number ?? ''} ${g.clock?.timeRemaining ?? ''}`
+                    : g.startTimeUTC ? new Date(g.startTimeUTC).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : 'TBD';
+            return `<div class="scoreboard-game ${isLive ? 'live' : ''}">
                 <span class="teams">${away} <span class="score">${scoreStr}</span> ${home}</span>
                 <span class="status">${status}</span>
             </div>`;
         }).join('');
-
-        // Scroll to today's games
-        const todayGame = inner.querySelector('.scoreboard-game:not(.upcoming)');
-        if (todayGame) {
-            setTimeout(() => todayGame.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' }), 300);
-        }
-
     } catch (e) {
-        inner.innerHTML = `<span class="scoreboard-loading">Scoreboard unavailable</span>`;
+        inner.innerHTML = `<span class="scoreboard-loading">Unavailable</span>`;
     }
 }
 

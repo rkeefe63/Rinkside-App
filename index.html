@@ -18,7 +18,12 @@
     </header>
 
     <!-- Scoreboard Strip -->
-    <div class="scoreboard-strip" id="scoreboard-strip">
+    <div class="scoreboard-strip">
+        <div class="scoreboard-nav">
+            <button class="scoreboard-btn" onclick="scoreboardOffset--; loadScoreboard()">← Prev</button>
+            <span id="scoreboard-date-label" class="scoreboard-date-label">Today</span>
+            <button class="scoreboard-btn" onclick="scoreboardOffset++; loadScoreboard()">Next →</button>
+        </div>
         <div class="scoreboard-inner" id="scoreboard-inner">
             <span class="scoreboard-loading">Loading tonight's games...</span>
         </div>
