@@ -17,45 +17,114 @@
         </div>
     </header>
 
-    <main>
-        <div class="chat-container">
-            <div class="chat-messages" id="chat-messages">
-                <div class="message bot">
-                    <div class="avatar">🏒</div>
-                    <div class="bubble">
-                        Hey, welcome to Rinkside! I'm your go-to for everything hockey — standings, scores, player
-                        stats, you name it. Ask me like you'd ask a buddy at the rink. Try something like:<br><br>
-                        <span class="suggestion" onclick="sendSuggestion(this)">📊 Who's leading the NHL in
-                            points?</span>
-                        <span class="suggestion" onclick="sendSuggestion(this)">🏆 Show me the current standings</span>
-                        <span class="suggestion" onclick="sendSuggestion(this)">🎯 Any games today?</span>
-                        <span class="suggestion" onclick="sendSuggestion(this)">🥅 Top goalies this season</span>
+    <!-- Scoreboard Strip -->
+    <div class="scoreboard-strip" id="scoreboard-strip">
+        <div class="scoreboard-inner" id="scoreboard-inner">
+            <span class="scoreboard-loading">Loading tonight's games...</span>
+        </div>
+    </div>
+
+    <div class="page-layout">
+
+        <!-- Sidebar -->
+        <aside class="sidebar">
+
+            <div class="sidebar-card" id="today-panel">
+                <div class="sidebar-card-title">📅 Today in Hockey</div>
+                <div id="today-content" class="sidebar-loading">Loading...</div>
+            </div>
+
+            <div class="sidebar-card" id="top-scorer-card">
+                <div class="sidebar-card-title">🎯 Points Leader</div>
+                <div id="top-scorer-content" class="sidebar-loading">Loading...</div>
+            </div>
+
+            <div class="sidebar-card" id="top-goalie-card">
+                <div class="sidebar-card-title">🥅 SV% Leader</div>
+                <div id="top-goalie-content" class="sidebar-loading">Loading...</div>
+            </div>
+
+            <div class="sidebar-card">
+                <div class="sidebar-card-title">💡 Ask About</div>
+                <div class="topic-groups">
+                    <div class="topic-group-label">Stats</div>
+                    <div class="topic-chips">
+                        <button class="topic-chip" onclick="sendSuggestion(this)">Standings</button>
+                        <button class="topic-chip" onclick="sendSuggestion(this)">Top scorers</button>
+                        <button class="topic-chip" onclick="sendSuggestion(this)">Top goalies</button>
+                        <button class="topic-chip" onclick="sendSuggestion(this)">Games today</button>
+                    </div>
+                    <div class="topic-group-label">Awards</div>
+                    <div class="topic-chips">
+                        <button class="topic-chip" onclick="sendSuggestion(this)">Hart Trophy</button>
+                        <button class="topic-chip" onclick="sendSuggestion(this)">Norris Trophy</button>
+                        <button class="topic-chip" onclick="sendSuggestion(this)">Jack Adams</button>
+                        <button class="topic-chip" onclick="sendSuggestion(this)">Calder Trophy</button>
+                    </div>
+                    <div class="topic-group-label">Debates</div>
+                    <div class="topic-chips">
+                        <button class="topic-chip" onclick="sendSuggestion(this)">Cup prediction</button>
+                        <button class="topic-chip" onclick="sendSuggestion(this)">McDavid vs MacKinnon</button>
+                        <button class="topic-chip" onclick="sendSuggestion(this)">Best player in NHL</button>
+                        <button class="topic-chip" onclick="sendSuggestion(this)">Crosby vs McDavid</button>
+                    </div>
+                    <div class="topic-group-label">Rules & Lingo</div>
+                    <div class="topic-chips">
+                        <button class="topic-chip" onclick="sendSuggestion(this)">Explain icing</button>
+                        <button class="topic-chip" onclick="sendSuggestion(this)">Explain offside</button>
+                        <button class="topic-chip" onclick="sendSuggestion(this)">Salary cap</button>
+                        <button class="topic-chip" onclick="sendSuggestion(this)">Bar down</button>
+                        <button class="topic-chip" onclick="sendSuggestion(this)">The Michigan</button>
+                        <button class="topic-chip" onclick="sendSuggestion(this)">Five hole</button>
                     </div>
                 </div>
             </div>
 
-            <div class="chat-input-area">
-                <div class="suggestions-row" id="suggestions-row">
-                    <button class="chip" onclick="sendSuggestion(this)">Standings</button>
-                    <button class="chip" onclick="sendSuggestion(this)">Games today</button>
-                    <button class="chip" onclick="sendSuggestion(this)">Top scorers</button>
-                    <button class="chip" onclick="sendSuggestion(this)">Top goalies</button>
-                    <button class="chip" onclick="sendSuggestion(this)">Explain icing</button>
-                    <button class="chip" onclick="sendSuggestion(this)">Explain offside</button>
+        </aside>
+
+        <!-- Chat -->
+        <main>
+            <div class="chat-container">
+                <div class="chat-messages" id="chat-messages">
+                    <div class="message bot">
+                        <div class="avatar">🏒</div>
+                        <div class="bubble">
+                            Hey, welcome to Rinkside! I'm your go-to for everything hockey — standings, scores, player
+                            stats, debates, rules, lingo. Ask me like you'd ask a buddy at the rink.<br><br>
+                            <span class="suggestion" onclick="sendSuggestion(this)">📊 Who's leading the NHL in
+                                points?</span>
+                            <span class="suggestion" onclick="sendSuggestion(this)">🏆 Show me the current
+                                standings</span>
+                            <span class="suggestion" onclick="sendSuggestion(this)">🎯 Any games today?</span>
+                            <span class="suggestion" onclick="sendSuggestion(this)">🥅 Top goalies this season</span>
+                        </div>
+                    </div>
                 </div>
-                <form id="chat-form">
-                    <input type="text" id="chat-input" placeholder="Ask anything hockey..." autocomplete="off" />
-                    <button type="submit" aria-label="Send">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                            stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                            <line x1="22" y1="2" x2="11" y2="13" />
-                            <polygon points="22 2 15 22 11 13 2 9 22 2" />
-                        </svg>
-                    </button>
-                </form>
+
+                <div class="chat-input-area">
+                    <div class="suggestions-row">
+                        <button class="chip" onclick="sendSuggestion(this)">Standings</button>
+                        <button class="chip" onclick="sendSuggestion(this)">Games today</button>
+                        <button class="chip" onclick="sendSuggestion(this)">Top scorers</button>
+                        <button class="chip" onclick="sendSuggestion(this)">Top goalies</button>
+                        <button class="chip" onclick="sendSuggestion(this)">Cup prediction</button>
+                        <button class="chip" onclick="sendSuggestion(this)">Explain icing</button>
+                    </div>
+                    <form id="chat-form">
+                        <input type="text" id="chat-input" placeholder="Ask anything hockey..." autocomplete="off" />
+                        <button type="submit" aria-label="Send">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                <line x1="22" y1="2" x2="11" y2="13" />
+                                <polygon points="22 2 15 22 11 13 2 9 22 2" />
+                            </svg>
+                        </button>
+                    </form>
+                </div>
             </div>
-        </div>
-    </main>
+        </main>
+
+    </div>
 
     <script src="app.js"></script>
 </body>

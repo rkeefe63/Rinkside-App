@@ -106,7 +106,7 @@ async function getResponse(q) {
     if (match(q, ['bar down', 'top cheese', 'celly', 'chirp', 'dangle', 'snipe', 'biscuit', 'barn', 'twig', 'wheel', 'apple', 'beauty', 'flow', 'gongshow', 'barn burner', 'standing on his head', 'between the pipes', 'backstop', 'blueliner', 'grinder', 'plug', 'pigeon', 'tape to tape', 'breakaway', 'odd-man', 'cycle', 'forecheck', 'backcheck', 'trap', 'top shelf', 'five hole', 'five-hole', 'glove side', 'blocker side', 'wraparound', 'saucer pass', 'one timer', 'one-timer', 'clapper', 'slap shot', 'wrist shot', 'backhand', 'deke', 'spin-o-rama', 'spinorama', 'lacrosse', 'michigan', 'coast to coast', 'end to end'])) return explainLingo(q);
     if (match(q, ['thought', 'think', 'opinion', 'feel about', 'better than', 'vs', 'versus', 'overrated', 'underrated', 'favourite', 'favorite', 'who should', 'who will', 'who would', 'greatest', 'goat'])) return generalOpinion(q);
     const teamMatch = detectTeam(q);
-    if (teamMatch && match(q, ['playoff', 'make it', 'making it', 'will they', 'chance', 'contend', 'bubble', 'clinch', 'season', 'outlook', 'how are', 'how is', 'doing this', 'think about', 'thoughts on'])) return await getTeamOutlook(teamMatch);
+    if (teamMatch && match(q, ['playoff', 'make it', 'making it', 'will they', 'chance', 'contend', 'bubble', 'clinch', 'season', 'outlook', 'how are', 'how is', 'doing this', 'think about', 'thoughts on', 'doing', 'look', 'good', 'bad', 'win', 'lose', 'cup', 'rebuild', 'tank', 'trade', 'future', 'this year', 'year', 'gonna', 'going to', 'think they', 'any good', 'any chance'])) return await getTeamOutlook(teamMatch);
     if (match(q, ['who is', 'tell me about', 'stats for', 'how is', 'how has', 'player', 'mcdavid', 'matthews', 'draisaitl', 'crosby', 'ovechkin', 'makar', 'hedman', 'mackinnon', 'rantanen', 'pastrnak'])) return await searchPlayer(q);
     return fallback();
 }
@@ -528,3 +528,94 @@ function fallback() {
 <span class="suggestion" onclick="sendSuggestion(this)">🎽 Jack Adams Award</span>
 <span class="suggestion" onclick="sendSuggestion(this)">🏒 MacKinnon vs McDavid</span>`;
 }
+
+// ── Scoreboard Strip ───────────────────────────────────────
+async function loadScoreboard() {
+    const inner = document.getElementById('scoreboard-inner');
+    try {
+        const dateStr = new Date().toISOString().split('T')[0];
+        const data = await nhlFetch(`${NHL}/schedule/${dateStr}`);
+        const games = data.gameWeek?.[0]?.games || [];
+        if (!games.length) {
+            inner.innerHTML = `<span class="scoreboard-loading">No games scheduled today</span>`;
+            return;
+        }
+        inner.innerHTML = games.map(g => {
+            const away = g.awayTeam?.abbrev || '?';
+            const home = g.homeTeam?.abbrev || '?';
+            const isLive = g.gameState === 'LIVE' || g.gameState === 'CRIT';
+            const isFinal = g.gameState === 'FINAL' || g.gameState === 'OFF';
+            const scoreStr = (isLive || isFinal) ? `${g.awayTeam?.score ?? 0}–${g.homeTeam?.score ?? 0}` : 'vs';
+            const status = isFinal ? 'Final' : isLive ? `P${g.periodDescriptor?.number} ${g.clock?.timeRemaining ?? ''}` : g.startTimeUTC ? new Date(g.startTimeUTC).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : 'TBD';
+            return `<div class="scoreboard-game ${isLive ? 'live' : ''}">
+                <span class="teams">${away} <span class="score">${scoreStr}</span> ${home}</span>
+                <span class="status">${status}</span>
+            </div>`;
+        }).join('');
+    } catch (e) {
+        inner.innerHTML = `<span class="scoreboard-loading">Scoreboard unavailable</span>`;
+    }
+}
+
+// ── Sidebar Stats ──────────────────────────────────────────
+async function loadSidebarStats() {
+    // Today panel
+    try {
+        const dateStr = new Date().toISOString().split('T')[0];
+        const data = await nhlFetch(`${NHL}/schedule/${dateStr}`);
+        const games = data.gameWeek?.[0]?.games || [];
+        const facts = [
+            'Wayne Gretzky holds 61 NHL records — including most goals, assists, and points.',
+            'The Stanley Cup is the oldest professional sports trophy in North America, dating to 1893.',
+            'A regulation NHL rink is 200 feet long and 85 feet wide.',
+            'The fastest recorded shot in NHL history was 108.8 mph by Zdeno Chara.',
+            'NHL players skate an average of 5 miles per game.',
+            'The first NHL game was played on December 19, 1917.',
+            'Connor McDavid has won the Hart Trophy multiple times before turning 30.',
+            'Goalie pads can be no wider than 11 inches — a rule introduced to increase scoring.',
+            'The "Original Six" era ran from 1942 to 1967 with just six teams in the league.',
+            'A hockey puck is frozen before games to reduce bouncing on the ice.'
+        ];
+        const fact = facts[Math.floor(Math.random() * facts.length)];
+        document.getElementById('today-content').innerHTML = `
+            <div class="today-games">${games.length}</div>
+            <div class="today-label">game${games.length !== 1 ? 's' : ''} today · ${new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</div>
+            <div class="today-fact">💡 ${fact}</div>`;
+    } catch (e) {
+        document.getElementById('today-content').innerHTML = `<span class="sidebar-loading">Unavailable</span>`;
+    }
+
+    // Top scorer
+    try {
+        const data = await nhlFetch(`${NHL}/skater-stats-leaders/current?categories=points&limit=1`);
+        const p = data.points?.[0];
+        if (p) {
+            document.getElementById('top-scorer-content').innerHTML = `
+                <div class="sidebar-stat-name">${p.firstName.default} ${p.lastName.default}</div>
+                <div class="sidebar-stat-team">${p.teamAbbrevs}</div>
+                <div class="sidebar-stat-value">${p.value}</div>
+                <div class="sidebar-stat-label">points · ${p.goals ?? 0}G ${p.assists ?? 0}A</div>`;
+        }
+    } catch (e) {
+        document.getElementById('top-scorer-content').innerHTML = `<span class="sidebar-loading">Unavailable</span>`;
+    }
+
+    // Top goalie
+    try {
+        const data = await nhlFetch(`${NHL}/goalie-stats-leaders/current?categories=savePctg&limit=1`);
+        const g = data.savePctg?.[0];
+        if (g) {
+            document.getElementById('top-goalie-content').innerHTML = `
+                <div class="sidebar-stat-name">${g.firstName.default} ${g.lastName.default}</div>
+                <div class="sidebar-stat-team">${g.teamAbbrevs}</div>
+                <div class="sidebar-stat-value">${g.value?.toFixed(3)}</div>
+                <div class="sidebar-stat-label">save % · ${g.goalsAgainstAverage?.toFixed(2)} GAA</div>`;
+        }
+    } catch (e) {
+        document.getElementById('top-goalie-content').innerHTML = `<span class="sidebar-loading">Unavailable</span>`;
+    }
+}
+
+// Load on page start
+loadScoreboard();
+loadSidebarStats();

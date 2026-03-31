@@ -29,9 +29,9 @@ body {
     font-family: 'Segoe UI', system-ui, sans-serif;
     background: var(--bg);
     color: var(--text);
+    min-height: 100vh;
     display: flex;
     flex-direction: column;
-    min-height: 100vh;
 }
 
 /* HEADER */
@@ -39,10 +39,11 @@ header {
     background: var(--bg-card);
     border-bottom: 1px solid var(--border);
     padding: 1rem 2rem;
+    flex-shrink: 0;
 }
 
 .header-inner {
-    max-width: 760px;
+    max-width: 1200px;
     margin: 0 auto;
     display: flex;
     align-items: center;
@@ -54,7 +55,6 @@ header {
     font-weight: 800;
     color: var(--accent);
     letter-spacing: -0.02em;
-    white-space: nowrap;
 }
 
 .tagline {
@@ -62,25 +62,211 @@ header {
     color: var(--text-muted);
 }
 
-/* MAIN */
-main {
+/* SCOREBOARD STRIP */
+.scoreboard-strip {
+    background: var(--bg-card);
+    border-bottom: 1px solid var(--border);
+    padding: 0.6rem 1.5rem;
+    overflow-x: auto;
+    flex-shrink: 0;
+    scrollbar-width: none;
+}
+
+.scoreboard-strip::-webkit-scrollbar {
+    display: none;
+}
+
+.scoreboard-inner {
+    display: flex;
+    gap: 1.5rem;
+    align-items: center;
+    min-width: max-content;
+}
+
+.scoreboard-game {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.82rem;
+    padding: 0.3rem 0.75rem;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    white-space: nowrap;
+}
+
+.scoreboard-game .teams {
+    font-weight: 700;
+}
+
+.scoreboard-game .score {
+    color: var(--accent2);
+    font-weight: 700;
+}
+
+.scoreboard-game .status {
+    color: var(--text-muted);
+    font-size: 0.75rem;
+}
+
+.scoreboard-game.live {
+    border-color: #ff6b6b;
+}
+
+.scoreboard-game.live .status {
+    color: #ff6b6b;
+}
+
+.scoreboard-loading {
+    font-size: 0.82rem;
+    color: var(--text-muted);
+}
+
+/* PAGE LAYOUT */
+.page-layout {
+    display: grid;
+    grid-template-columns: 240px 1fr;
+    gap: 0;
     flex: 1;
+    max-width: 1200px;
+    width: 100%;
+    margin: 0 auto;
+    padding: 1.5rem 1rem;
+    align-items: start;
+}
+
+/* SIDEBAR */
+.sidebar {
     display: flex;
     flex-direction: column;
-    padding: 1.5rem 1rem;
+    gap: 1rem;
+    position: sticky;
+    top: 1.5rem;
+    padding-right: 1rem;
+}
+
+.sidebar-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1rem;
+}
+
+.sidebar-card-title {
+    font-size: 0.78rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-muted);
+    margin-bottom: 0.75rem;
+}
+
+.sidebar-loading {
+    font-size: 0.82rem;
+    color: var(--text-muted);
+}
+
+.sidebar-stat-name {
+    font-weight: 700;
+    font-size: 0.9rem;
+    margin-bottom: 0.15rem;
+}
+
+.sidebar-stat-team {
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    margin-bottom: 0.4rem;
+}
+
+.sidebar-stat-value {
+    font-size: 1.4rem;
+    font-weight: 800;
+    color: var(--accent2);
+    line-height: 1;
+}
+
+.sidebar-stat-label {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    margin-top: 0.15rem;
+}
+
+.today-games {
+    font-size: 1.8rem;
+    font-weight: 800;
+    color: var(--accent);
+    line-height: 1;
+}
+
+.today-label {
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    margin-top: 0.2rem;
+    margin-bottom: 0.75rem;
+}
+
+.today-fact {
+    font-size: 0.82rem;
+    color: var(--text-muted);
+    line-height: 1.6;
+    border-top: 1px solid var(--border);
+    padding-top: 0.75rem;
+}
+
+/* TOPIC GROUPS */
+.topic-groups {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+}
+
+.topic-group-label {
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--accent);
+    margin-top: 0.25rem;
+}
+
+.topic-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+}
+
+.topic-chip {
+    padding: 0.25rem 0.65rem;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    cursor: pointer;
+    font-family: inherit;
+    transition: border-color 0.2s, color 0.2s;
+}
+
+.topic-chip:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+/* CHAT */
+main {
+    display: flex;
+    flex-direction: column;
+    min-height: 600px;
 }
 
 .chat-container {
-    max-width: 760px;
-    width: 100%;
-    margin: 0 auto;
     display: flex;
     flex-direction: column;
     flex: 1;
     gap: 1rem;
+    height: 100%;
 }
 
-/* MESSAGES */
 .chat-messages {
     flex: 1;
     display: flex;
@@ -88,6 +274,8 @@ main {
     gap: 1rem;
     overflow-y: auto;
     padding-bottom: 0.5rem;
+    min-height: 400px;
+    max-height: 65vh;
 }
 
 .message {
@@ -134,7 +322,7 @@ main {
     padding: 0.85rem 1.1rem;
     font-size: 0.93rem;
     line-height: 1.7;
-    max-width: 85%;
+    max-width: 90%;
     color: var(--text);
 }
 
@@ -146,7 +334,6 @@ main {
     color: #c8d8ff;
 }
 
-/* SUGGESTIONS IN BUBBLE */
 .suggestion {
     display: inline-block;
     margin: 0.3rem 0.3rem 0 0;
@@ -164,7 +351,6 @@ main {
     background: #1e2d45;
 }
 
-/* STAT TABLE */
 .stat-table {
     width: 100%;
     border-collapse: collapse;
@@ -210,7 +396,6 @@ main {
     font-weight: 600;
 }
 
-/* TYPING INDICATOR */
 .typing .bubble {
     display: flex;
     gap: 5px;
@@ -247,7 +432,6 @@ main {
     }
 }
 
-/* INPUT AREA */
 .chat-input-area {
     display: flex;
     flex-direction: column;
@@ -326,4 +510,38 @@ main {
 
 .error {
     color: #ff6b6b;
+}
+
+/* RESPONSIVE */
+@media (max-width: 768px) {
+    .page-layout {
+        grid-template-columns: 1fr;
+        padding: 1rem;
+    }
+
+    .sidebar {
+        position: static;
+        padding-right: 0;
+        flex-direction: row;
+        flex-wrap: wrap;
+    }
+
+    .sidebar-card {
+        flex: 1 1 calc(50% - 0.5rem);
+        min-width: 200px;
+    }
+
+    .chat-messages {
+        max-height: 50vh;
+    }
+}
+
+@media (max-width: 480px) {
+    .sidebar {
+        flex-direction: column;
+    }
+
+    .sidebar-card {
+        flex: 1 1 100%;
+    }
 }
