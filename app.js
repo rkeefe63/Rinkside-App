@@ -103,7 +103,7 @@ async function getResponse(q) {
     if (match(q, ['offside', 'off side'])) return explainOffside();
     if (match(q, ['penalty', 'penalties', 'power play', 'shorthanded', 'penalty kill', 'hooking', 'tripping', 'slashing'])) return explainPenalties();
     if (match(q, ['hat trick', 'hat-trick'])) return explainHatTrick();
-    if (match(q, ['bar down', 'top cheese', 'celly', 'chirp', 'dangle', 'snipe', 'biscuit', 'barn', 'twig', 'wheel'])) return explainLingo(q);
+    if (match(q, ['bar down', 'top cheese', 'celly', 'chirp', 'dangle', 'snipe', 'biscuit', 'barn', 'twig', 'wheel', 'apple', 'beauty', 'flow', 'gongshow', 'barn burner', 'standing on his head', 'between the pipes', 'backstop', 'blueliner', 'grinder', 'plug', 'pigeon', 'tape to tape', 'breakaway', 'odd-man', 'cycle', 'forecheck', 'backcheck', 'trap', 'top shelf', 'five hole', 'five-hole', 'glove side', 'blocker side', 'wraparound', 'saucer pass', 'one timer', 'one-timer', 'clapper', 'slap shot', 'wrist shot', 'backhand', 'deke', 'spin-o-rama', 'spinorama', 'lacrosse', 'michigan', 'coast to coast', 'end to end'])) return explainLingo(q);
     if (match(q, ['thought', 'think', 'opinion', 'feel about', 'better than', 'vs', 'versus', 'overrated', 'underrated', 'favourite', 'favorite', 'who should', 'who will', 'who would', 'greatest', 'goat'])) return generalOpinion(q);
     const teamMatch = detectTeam(q);
     if (teamMatch && match(q, ['playoff', 'make it', 'making it', 'will they', 'chance', 'contend', 'bubble', 'clinch', 'season', 'outlook', 'how are', 'how is', 'doing this', 'think about', 'thoughts on'])) return await getTeamOutlook(teamMatch);
@@ -433,20 +433,67 @@ function explainHatTrick() {
 function explainLingo(q) {
     const terms = {
         'bar down': `<strong>Bar down</strong> 🚨 — When a shot hits the crossbar and drops straight into the net. Makes a distinct "ping" that every hockey fan lives for. Pure filth.`,
-        'top cheese': `<strong>Top cheese</strong> 🧀 — A shot that goes up high in the net, under the crossbar. If someone went top cheese, the goalie had zero chance.`,
-        'celly': `<strong>Celly</strong> 🎉 — Short for celebration. From the subtle fist pump to the full-on dive across the ice, the celly is an art form.`,
-        'chirp': `<strong>Chirp</strong> 🗣️ — Trash talk on the ice. Getting chirped and not responding? That's a bad look.`,
-        'dangle': `<strong>Dangle</strong> 🏒 — A sick stickhandling move that dekes out a defender. "He dangled right through the defense" means he made everyone look silly.`,
-        'snipe': `<strong>Snipe</strong> 🎯 — A perfectly placed shot that beats the goalie clean. A sniper is a player known for their shooting accuracy.`,
-        'biscuit': `<strong>Biscuit</strong> 🏒 — The puck. "Put the biscuit in the basket" = score a goal.`,
+        'top cheese': `<strong>Top cheese</strong> 🧀 — A shot that goes up high in the net, under the crossbar. Also called "top shelf" or "top cheddar." If someone went top cheese, the goalie had zero chance.`,
+        'top shelf': `<strong>Top shelf</strong> 🧀 — Same as top cheese. A shot that beats the goalie up high, under the crossbar. Where mama hides the cookies.`,
+        'celly': `<strong>Celly</strong> 🎉 — Short for celebration. What a player does after scoring. From the subtle fist pump to the full-on dive across the ice, the celly is an art form. Some guys have signature cellies. Some keep it cool. Either way, you earned it.`,
+        'chirp': `<strong>Chirp</strong> 🗣️ — Trash talk on the ice. Hockey players are notorious chirpers. The best chirps are creative, quick, and land right after a big play. Getting chirped and not responding? That's a bad look.`,
+        'dangle': `<strong>Dangle</strong> � — A sick stickhandling move that dekes out a defender or goalie. "He dangled right through the defense" means he made everyone look silly. Pure skill, maximum disrespect.`,
+        'deke': `<strong>Deke</strong> 🏒 — A fake or feint move to get past a defender or goalie. Short for "decoy." The foundation of every great dangle.`,
+        'snipe': `<strong>Snipe</strong> � — A perefectly placed shot that beats the goalie clean. No luck — just a shooter who knows exactly where they're putting it. A sniper is a player known for their shooting accuracy.`,
+        'biscuit': `<strong>Biscuit</strong> 🏒 — The puck. "Put the biscuit in the basket" = score a goal. Hockey lingo makes everything sound better.`,
         'barn': `<strong>Barn</strong> 🏟️ — The arena. A packed barn with a rowdy crowd is one of the best atmospheres in sports.`,
-        'twig': `<strong>Twig</strong> 🏒 — A hockey stick. Players are very particular about their twigs.`,
-        'wheel': `<strong>Wheel</strong> 🛞 — To skate fast. "He can wheel" means serious speed.`
+        'twig': `<strong>Twig</strong> 🏒 — A hockey stick. Old school term from when sticks were made of wood. Players are very particular about their twigs — curve, flex, length. It's personal.`,
+        'wheel': `<strong>Wheel</strong> 🛞 — To skate fast. "He can wheel" means serious speed. "Wheeling and dealing" means flying up the ice and making plays happen.`,
+        'apple': `<strong>Apple</strong> 🍎 — An assist. "He had two apples on that goal." Some guys are apple merchants — they rack up assists without scoring much themselves.`,
+        'beauty': `<strong>Beauty</strong> 😎 — A compliment. A great player, a great play, or a great person. "What a beauty." One of the highest compliments in hockey culture.`,
+        'flow': `<strong>Flow</strong> 💇 — Long, beautiful hockey hair flowing out the back of the helmet. A rite of passage. The better the flow, the better the player — or so the legend goes.`,
+        'gongshow': `<strong>Gongshow</strong> 🎪 — A chaotic, wild game or situation. "That third period was a total gongshow." Can be used positively (wild, exciting game) or negatively (complete mess).`,
+        'barn burner': `<strong>Barn burner</strong> 🔥 — A high-scoring, back-and-forth, exciting game. The kind of game where both goalies are getting lit up and nobody's sitting down.`,
+        'standing on his head': `<strong>Standing on his head</strong> 🥅 — A goalie making incredible saves, keeping his team in the game against all odds. "He was standing on his head out there" = the goalie was the only reason they didn't lose by five.`,
+        'between the pipes': `<strong>Between the pipes</strong> 🥅 — In goal. The goalposts are the "pipes." "Who's between the pipes tonight?" = who's starting in goal?`,
+        'backstop': `<strong>Backstop</strong> 🥅 — Another word for goalie. "Their backstop was unreal tonight."`,
+        'blueliner': `<strong>Blueliner</strong> 🔵 — A defenceman. They play near the blue line. "Elite blueliner" = elite defenceman.`,
+        'grinder': `<strong>Grinder</strong> 💪 — A hard-working, physical player who doesn't score much but contributes in other ways — winning battles, blocking shots, killing penalties. Every team needs grinders.`,
+        'plug': `<strong>Plug</strong> 🔌 — A bad player. Not a compliment. "He's a plug" = he shouldn't be in the NHL.`,
+        'pigeon': `<strong>Pigeon</strong> 🐦 — A player who benefits from playing with better teammates but can't produce on their own. "He's a pigeon" = his numbers are inflated by his linemates.`,
+        'tape to tape': `<strong>Tape to tape</strong> 🎯 — A perfect pass, from one player's stick tape directly to another's. No bobbling, no chasing — just clean possession.`,
+        'breakaway': `<strong>Breakaway</strong> 🏃 — When a player gets behind the defence and goes one-on-one with the goalie. One of the most exciting plays in hockey.`,
+        'odd-man': `<strong>Odd-man rush</strong> ⚡ — When the attacking team has more players than defenders on a rush (2-on-1, 3-on-2). Creates high-danger scoring chances.`,
+        'cycle': `<strong>Cycle</strong> 🔄 — When a team maintains possession in the offensive zone by moving the puck along the boards in a circular pattern, wearing down the defence.`,
+        'forecheck': `<strong>Forecheck</strong> 🏒 — Aggressive pressure in the offensive zone to win the puck back. Teams with a strong forecheck are exhausting to play against.`,
+        'backcheck': `<strong>Backcheck</strong> 🏃 — Forwards skating back hard to help defend against an opposing rush. "He doesn't backcheck" = a knock on a player's defensive effort.`,
+        'trap': `<strong>Neutral zone trap</strong> 😴 — A defensive system where a team clogs the neutral zone to prevent odd-man rushes. Effective but boring to watch. The New Jersey Devils made it famous in the 90s.`,
+        'five hole': `<strong>Five hole</strong> 🕳️ — The gap between a goalie's legs. Scoring five-hole means putting the puck right through the middle. Goalies hate giving up five-hole goals.`,
+        'five-hole': `<strong>Five hole</strong> 🕳️ — The gap between a goalie's legs. Scoring five-hole means putting the puck right through the middle.`,
+        'glove side': `<strong>Glove side</strong> 🧤 — The side of the net where the goalie holds their catching glove. A glove-side snipe is a thing of beauty.`,
+        'blocker side': `<strong>Blocker side</strong> 🏒 — The side of the net where the goalie holds their stick (blocker). Generally considered the weaker side for most goalies.`,
+        'wraparound': `<strong>Wraparound</strong> 🔄 — When a player skates around the back of the net and tries to tuck the puck in from behind the goal line. Requires quick hands and a sleeping goalie.`,
+        'saucer pass': `<strong>Saucer pass</strong> 🛸 — A pass that floats through the air like a flying saucer to avoid a defender's stick. One of the prettiest plays in hockey when it connects.`,
+        'one timer': `<strong>One-timer</strong> ⚡ — When a player shoots the puck immediately off a pass without stopping it first. The hardest shot in hockey to stop — the goalie has no time to set.`,
+        'one-timer': `<strong>One-timer</strong> ⚡ — When a player shoots the puck immediately off a pass without stopping it first. The hardest shot in hockey to stop.`,
+        'clapper': `<strong>Clapper</strong> 💥 — A slap shot. "He wound up and let a clapper go" = he took a big slap shot.`,
+        'slap shot': `<strong>Slap shot</strong> 💥 — The hardest shot in hockey. Player winds up and slaps the puck with full force. Can reach 100+ mph. The clapper.`,
+        'wrist shot': `<strong>Wrist shot</strong> 🎯 — A quick, accurate shot using wrist motion. More accurate than a slap shot, harder to read for goalies. The bread and butter of most snipers.`,
+        'backhand': `<strong>Backhand</strong> 🔄 — A shot or pass using the back of the blade. Harder to execute but nearly impossible to read — goalies hate a good backhand.`,
+        'spin-o-rama': `<strong>Spin-o-rama</strong> 🌀 — A move where a player spins 360 degrees while shooting or passing. Made famous by Peter Forsberg. Banned in shootouts but still legal in regular play.`,
+        'spinorama': `<strong>Spin-o-rama</strong> 🌀 — A 360-degree spin move while shooting or passing. One of the most highlight-reel plays in hockey.`,
+        'lacrosse': `<strong>Lacrosse goal / Michigan</strong> 🥍 — When a player picks the puck up on their stick blade and tucks it into the net from behind the goal, like a lacrosse shot. Also called "The Michigan." One of the most jaw-dropping plays in hockey.`,
+        'michigan': `<strong>The Michigan</strong> 🥍 — When a player picks the puck up on their stick blade and tucks it into the net from behind the goal. Named after a move from college hockey. Mikael Granlund and Trevor Zegras have pulled it off in the NHL. Absolutely filthy.`,
+        'coast to coast': `<strong>Coast to coast</strong> 🌊 — When a player carries the puck the entire length of the ice, from their own end to scoring. The ultimate individual effort. "He went coast to coast and buried it."`,
+        'end to end': `<strong>End to end</strong> 🏒 — Same as coast to coast. A player carrying the puck the full length of the ice.`
     };
     for (const [term, explanation] of Object.entries(terms)) {
         if (q.includes(term)) return explanation;
     }
-    return fallback();
+    return `Hockey has its own language — here are some classics you should know:<br><br>
+<span class="suggestion" onclick="sendSuggestion(this)">Bar down</span>
+<span class="suggestion" onclick="sendSuggestion(this)">Top cheese</span>
+<span class="suggestion" onclick="sendSuggestion(this)">Celly</span>
+<span class="suggestion" onclick="sendSuggestion(this)">Chirp</span>
+<span class="suggestion" onclick="sendSuggestion(this)">Dangle</span>
+<span class="suggestion" onclick="sendSuggestion(this)">Five hole</span>
+<span class="suggestion" onclick="sendSuggestion(this)">The Michigan</span>
+<span class="suggestion" onclick="sendSuggestion(this)">Saucer pass</span>`;
 }
 
 // ── Player Search ──────────────────────────────────────────
